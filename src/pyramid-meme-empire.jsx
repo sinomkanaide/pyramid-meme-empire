@@ -1,90 +1,120 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, Zap, Trophy, ShoppingCart, Users, Crown, Gift } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
 
 // ============================================================================
-// PYRAMID MEME EMPIRE - TAP TO EARN GAME
-// Web3 Degen Edition - Base Network
+// PYRAMID MEME EMPIRE V5 - COMPLETE SYSTEM
+// Arena, Quests, Energy, Tooltips, TBA Rewards
 // ============================================================================
 
-const PyramidMemeEmpire = () => {
-  // ========== WALLET & WEB3 STATE ==========
+const PyramidMemeEmpireV5 = () => {
+  // ========== STATE ==========
   const [walletAddress, setWalletAddress] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  
-  // ========== GAME STATE ==========
-  const [xp, setXp] = useState(0);
+  const [bricks, setBricks] = useState(28);
+  const [displayBricks, setDisplayBricks] = useState(28);
   const [level, setLevel] = useState(1);
-  const [energy, setEnergy] = useState(100);
+  const [spme, setSpme] = useState(0);
+  const [displaySpme, setDisplaySpme] = useState(0);
+  const [energy, setEnergy] = useState(72); // Start at 72 for demo
+  const [maxEnergy, setMaxEnergy] = useState(100);
   const [lastTapTime, setLastTapTime] = useState(0);
-  const [canTap, setCanTap] = useState(true);
-  
-  // ========== PREMIUM & BOOSTS ==========
   const [isPremium, setIsPremium] = useState(false);
-  const [activeBoosts, setActiveBoosts] = useState({
-    x2: null, // timestamp when expires
-    x5: null,
-  });
   const [hasBattlePass, setHasBattlePass] = useState(false);
-  
-  // ========== UI STATE ==========
+  const [referrals, setReferrals] = useState(3);
   const [currentTab, setCurrentTab] = useState('game');
-  const [tapAnimation, setTapAnimation] = useState(false);
-  const [showXpGain, setShowXpGain] = useState(null);
+  const [particles, setParticles] = useState([]);
+  const [floatingCoins, setFloatingCoins] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [pyramidPulse, setPyramidPulse] = useState(false);
+  const [showFireworks, setShowFireworks] = useState(false);
+  const [referralLink, setReferralLink] = useState('');
+  const [activeTooltip, setActiveTooltip] = useState(null);
   
-  // ========== LEADERBOARD (MOCK DATA) ==========
+  // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
-    { address: '0x742d...4f2a', xp: 1250000, level: 45 },
-    { address: '0x8c3a...9b1e', xp: 850000, level: 38 },
-    { address: '0x1f9d...3c7b', xp: 620000, level: 32 },
-    { address: '0x5e2a...8d4f', xp: 450000, level: 28 },
-    { address: '0x9a7c...2e1d', xp: 320000, level: 24 },
+    { rank: 1, name: 'CryptoKing', taps: 8934, winnings: '23W' },
+    { rank: 2, name: 'TapMaster', taps: 7821, winnings: '19W' },
+    { rank: 3, name: 'MoaiLord', taps: 7456, winnings: '17W' },
+    { rank: 4, name: 'SpeedTapper', taps: 6892, winnings: '14W' },
+    { rank: 5, name: 'PyramidPro', taps: 6234, winnings: '12W' },
+    { rank: 6, name: 'BrickMaster', taps: 5891, winnings: '11W' },
+    { rank: 7, name: 'ClickLord', taps: 5432, winnings: '10W' },
+    { rank: 8, name: 'TapGod', taps: 5123, winnings: '9W' },
+    { rank: 9, name: 'MoaiKing', taps: 4876, winnings: '8W' },
+    { rank: 10, name: 'StackPro', taps: 4567, winnings: '7W' },
   ]);
+  const [userRank, setUserRank] = useState(47); // User's current rank
+  
+  // Quests system
+  const [quests, setQuests] = useState([
+    { id: 1, title: 'Follow on X', description: 'Follow @PyramidMeme on X', reward: 'TBA', completed: false, type: 'social', icon: '🐦' },
+    { id: 2, title: 'Like Latest Post', description: 'Like our pinned post on X', reward: 'TBA', completed: false, type: 'social', icon: '❤️' },
+    { id: 3, title: 'Retweet', description: 'RT our announcement', reward: 'TBA', completed: false, type: 'social', icon: '🔄' },
+    { id: 4, title: 'Join Telegram', description: 'Join our community', reward: 'TBA', completed: true, type: 'social', icon: '💬' },
+    { id: 5, title: 'Stack 100 Bricks', description: 'Tap 100 times', reward: 'TBA', completed: false, type: 'game', icon: '🧱' },
+  ]);
+  
+  const coinSounds = useRef([]);
+  const levelUpSound = useRef(null);
+  const whooshSound = useRef(null);
+  
+  const memecoins = ['doge', 'shib', 'pepe', 'wojak', 'btc', 'eth'];
+  
+  // ========== FLOATING COINS ==========
+  useEffect(() => {
+    const initialCoins = Array.from({ length: 8 }, (_, i) => ({
+      id: i,
+      coin: memecoins[Math.floor(Math.random() * memecoins.length)],
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      speed: 10 + Math.random() * 15,
+      size: 30 + Math.random() * 30,
+    }));
+    setFloatingCoins(initialCoins);
+  }, []);
 
-  // ========== LEVEL CALCULATION ==========
-  const calculateLevelFromXP = (currentXp) => {
-    let calculatedLevel = 1;
-    while (calculateRequiredXP(calculatedLevel + 1) <= currentXp) {
-      calculatedLevel++;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFloatingCoins(coins => 
+        coins.map(coin => ({
+          ...coin,
+          y: coin.y >= 100 ? -10 : coin.y + (coin.speed * 0.05),
+        }))
+      );
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ========== NUMBER COUNTING ==========
+  useEffect(() => {
+    if (displayBricks !== bricks) {
+      const increment = Math.ceil((bricks - displayBricks) / 10);
+      const timer = setTimeout(() => {
+        setDisplayBricks(prev => Math.min(prev + increment, bricks));
+      }, 30);
+      return () => clearTimeout(timer);
     }
-    return calculatedLevel;
-  };
+  }, [bricks, displayBricks]);
 
-  const calculateRequiredXP = (targetLevel) => {
-    return Math.floor(100 * Math.pow(targetLevel, 1.5));
-  };
+  useEffect(() => {
+    if (displaySpme !== spme) {
+      const increment = Math.ceil((spme - displaySpme) / 10);
+      const timer = setTimeout(() => {
+        setDisplaySpme(prev => Math.min(prev + increment, spme));
+      }, 30);
+      return () => clearTimeout(timer);
+    }
+  }, [spme, displaySpme]);
 
-  const getXPForNextLevel = () => {
-    return calculateRequiredXP(level + 1);
-  };
+  useEffect(() => {
+    if (walletAddress) {
+      const baseUrl = window.location.origin;
+      const refCode = walletAddress.slice(2, 12).toUpperCase();
+      setReferralLink(`${baseUrl}?ref=${refCode}`);
+    }
+  }, [walletAddress]);
 
-  const getXPProgress = () => {
-    const currentLevelXP = calculateRequiredXP(level);
-    const nextLevelXP = getXPForNextLevel();
-    const progress = ((xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100;
-    return Math.max(0, Math.min(100, progress));
-  };
-
-  // ========== BOOST CALCULATIONS ==========
-  const getActiveBoostMultiplier = () => {
-    const now = Date.now();
-    if (activeBoosts.x5 && activeBoosts.x5 > now) return 5;
-    if (activeBoosts.x2 && activeBoosts.x2 > now) return 2;
-    return 1;
-  };
-
-  const getBattlePassBonus = () => {
-    return hasBattlePass ? 1.1 : 1;
-  };
-
-  const getXpPerTap = () => {
-    const base = 1;
-    const boostMultiplier = getActiveBoostMultiplier();
-    const battlePassBonus = getBattlePassBonus();
-    return Math.floor(base * boostMultiplier * battlePassBonus * 10) / 10;
-  };
-
-  // ========== WALLET CONNECTION ==========
+  // ========== WALLET ==========
   const connectWallet = async () => {
     setIsConnecting(true);
     try {
@@ -93,25 +123,19 @@ const PyramidMemeEmpire = () => {
           method: 'eth_requestAccounts' 
         });
         
-        // Switch to Base network (Chain ID: 8453)
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x2105' }], // 8453 in hex
+            params: [{ chainId: '0x2105' }],
           });
         } catch (switchError) {
-          // If Base is not added, add it
           if (switchError.code === 4902) {
             await window.ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: '0x2105',
                 chainName: 'Base',
-                nativeCurrency: {
-                  name: 'Ethereum',
-                  symbol: 'ETH',
-                  decimals: 18
-                },
+                nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
                 rpcUrls: ['https://mainnet.base.org'],
                 blockExplorerUrls: ['https://basescan.org']
               }]
@@ -120,577 +144,1968 @@ const PyramidMemeEmpire = () => {
         }
         
         setWalletAddress(accounts[0]);
-        showNotification('🎉 Wallet Connected! Welcome Degen!', 'success');
+        playWhoosh();
+        showNotification('🎉 WELCOME!');
       } else {
-        showNotification('⚠️ Please install MetaMask or a Web3 wallet', 'error');
+        showNotification('⚠️ INSTALL METAMASK');
       }
     } catch (error) {
-      console.error('Wallet connection error:', error);
-      showNotification('❌ Connection failed. Try again.', 'error');
+      showNotification('❌ FAILED');
     }
     setIsConnecting(false);
   };
 
-  const disconnectWallet = () => {
-    setWalletAddress(null);
-    showNotification('👋 Wallet disconnected', 'info');
-  };
-
   // ========== TAP MECHANICS ==========
-  const handleTap = () => {
+  const handleTap = (e) => {
     const now = Date.now();
     
-    // Check if user is free and at level 3 limit
-    if (!isPremium && level >= 3) {
-      showNotification('🔒 Level 3 is max for free users. Upgrade to Premium!', 'warning');
-      return;
-    }
-    
     // Check cooldown for free users
-    if (!isPremium && (now - lastTapTime) < 2000) {
-      setCanTap(false);
+    if (!isPremium && !hasBattlePass && (now - lastTapTime) < 2000) {
+      showNotification('⏱️ COOLDOWN!');
       return;
     }
     
     // Check energy for free users
-    if (!isPremium && energy <= 0) {
-      showNotification('⚡ No energy! Wait for refill or buy Energy Refill', 'warning');
+    if (!isPremium && !hasBattlePass && energy <= 0) {
+      showNotification('⚡ NO ENERGY! WAIT OR GO PREMIUM');
       return;
     }
     
-    // Execute tap
-    const xpGained = getXpPerTap();
-    setXp(prev => prev + xpGained);
+    // Add brick
+    setBricks(prev => prev + 1);
     
-    if (!isPremium) {
+    // Add $PME (TBA - hidden amount)
+    const pmeGain = Math.floor(Math.random() * 3) + 1; // 1-3 PME per tap (hidden from user)
+    setSpme(prev => prev + pmeGain);
+    
+    // Energy management (only for free users)
+    if (!isPremium && !hasBattlePass) {
       setEnergy(prev => Math.max(0, prev - 1));
       setLastTapTime(now);
-      setCanTap(false);
-      setTimeout(() => setCanTap(true), 2000);
     }
     
-    // Visual feedback
-    setTapAnimation(true);
-    setShowXpGain({ value: xpGained, id: Date.now() });
-    setTimeout(() => setTapAnimation(false), 200);
-    setTimeout(() => setShowXpGain(null), 1000);
-  };
-
-  // ========== ENERGY REGENERATION ==========
-  useEffect(() => {
-    if (isPremium) return;
+    // Pyramid pulse
+    setPyramidPulse(true);
+    setTimeout(() => setPyramidPulse(false), 300);
     
-    const interval = setInterval(() => {
-      setEnergy(prev => Math.min(100, prev + 1));
-    }, 30000); // 1 energy per 30 seconds
+    playCoinSound();
+    createParticles(e.clientX, e.clientY);
     
-    return () => clearInterval(interval);
-  }, [isPremium]);
-
-  // ========== LEVEL UP CHECK ==========
-  useEffect(() => {
-    const newLevel = calculateLevelFromXP(xp);
+    // Level up check
+    const newLevel = Math.floor(bricks / 100) + 1;
     if (newLevel > level) {
       setLevel(newLevel);
-      showNotification(`🎊 LEVEL UP! You're now Level ${newLevel}!`, 'success');
+      triggerLevelUp();
     }
-  }, [xp, level]);
+    
+    // Update quest progress
+    if (bricks + 1 >= 100) {
+      updateQuest(5, true); // Stack 100 Bricks quest
+    }
+  };
 
-  // ========== BOOST EXPIRATION CHECK ==========
+  // ========== PARTICLES ==========
+  const createParticles = (x, y) => {
+    const rect = document.getElementById('tap-area')?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const relX = ((x - rect.left) / rect.width) * 100;
+    const relY = ((y - rect.top) / rect.height) * 100;
+    
+    const confettiShapes = ['▪', '▫', '●', '◆', '★'];
+    const cryptoEmojis = ['💎', '🚀', '⚡', '💰', '🔥'];
+    
+    const newParticles = [
+      ...Array.from({ length: 3 }, (_, i) => ({
+        id: `c-${Date.now()}-${i}`,
+        type: 'confetti',
+        x: relX,
+        y: relY,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -4 - Math.random() * 2,
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 15,
+        content: confettiShapes[Math.floor(Math.random() * confettiShapes.length)],
+        color: ['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00'][Math.floor(Math.random() * 4)],
+      })),
+      ...Array.from({ length: 3 }, (_, i) => ({
+        id: `e-${Date.now()}-${i}`,
+        type: 'emoji',
+        x: relX + (Math.random() - 0.5) * 10,
+        y: relY,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -3 - Math.random() * 2,
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 10,
+        content: cryptoEmojis[Math.floor(Math.random() * cryptoEmojis.length)],
+      })),
+    ];
+    
+    setParticles(prev => [...prev, ...newParticles]);
+    setTimeout(() => {
+      setParticles(prev => 
+        prev.filter(p => !newParticles.find(np => np.id === p.id))
+      );
+    }, 3500);
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
-      setActiveBoosts(prev => ({
-        x2: prev.x2 && prev.x2 > now ? prev.x2 : null,
-        x5: prev.x5 && prev.x5 > now ? prev.x5 : null,
-      }));
-    }, 1000);
-    
+      setParticles(particles =>
+        particles.map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          vy: p.vy + 0.15,
+          rotation: p.rotation + p.rotationSpeed,
+        }))
+      );
+    }, 50);
     return () => clearInterval(interval);
   }, []);
 
-  // ========== SHOP FUNCTIONS ==========
-  const purchaseItem = async (itemName, price) => {
-    if (!walletAddress) {
-      showNotification('⚠️ Connect wallet first!', 'warning');
-      return;
+  // ========== LEVEL UP ==========
+  const triggerLevelUp = () => {
+    playLevelUp();
+    showNotification(`🎊 LEVEL ${level + 1}!`);
+    setShowFireworks(true);
+    setTimeout(() => setShowFireworks(false), 3000);
+    
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => createParticles(centerX, centerY), i * 100);
+    }
+  };
+
+  // ========== AUDIO ==========
+  const playCoinSound = () => {
+    try {
+      const randomSound = coinSounds.current[Math.floor(Math.random() * coinSounds.current.length)];
+      if (randomSound) {
+        randomSound.currentTime = 0;
+        randomSound.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
+  const playLevelUp = () => {
+    try {
+      if (levelUpSound.current) {
+        levelUpSound.current.currentTime = 0;
+        levelUpSound.current.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
+  const playWhoosh = () => {
+    try {
+      if (whooshSound.current) {
+        whooshSound.current.currentTime = 0;
+        whooshSound.current.play().catch(() => {});
+      }
+    } catch (e) {}
+  };
+
+  // ========== ENERGY REGEN ==========
+  useEffect(() => {
+    if (isPremium || hasBattlePass) return;
+    const interval = setInterval(() => {
+      setEnergy(prev => Math.min(maxEnergy, prev + 1));
+    }, 30000); // 1 energy per 30 seconds
+    return () => clearInterval(interval);
+  }, [isPremium, hasBattlePass, maxEnergy]);
+
+  // ========== NOTIFICATION ==========
+  const showNotification = (message) => {
+    setNotification(message);
+    setTimeout(() => setNotification(null), 2500);
+  };
+
+  // ========== QUESTS ==========
+  const updateQuest = (questId, completed) => {
+    setQuests(prev => prev.map(q => q.id === questId ? { ...q, completed } : q));
+  };
+
+  const handleQuestClick = (quest) => {
+    if (quest.completed) return;
+    
+    // Open external links for social quests
+    if (quest.type === 'social') {
+      if (quest.title.includes('Follow on X')) {
+        window.open('https://x.com/pyramidmeme', '_blank');
+      } else if (quest.title.includes('Like')) {
+        window.open('https://x.com/pyramidmeme', '_blank');
+      } else if (quest.title.includes('Retweet')) {
+        window.open('https://x.com/pyramidmeme', '_blank');
+      } else if (quest.title.includes('Telegram')) {
+        window.open('https://t.me/pyramidmeme', '_blank');
+      }
+      
+      // Mark as completed after 2 seconds (simulated - real app would verify via API)
+      setTimeout(() => {
+        updateQuest(quest.id, true);
+        showNotification(`🎉 +${Math.floor(Math.random() * 50) + 10} $PME!`);
+      }, 2000);
+    }
+  };
+
+  // ========== SHARE ==========
+  const shareOnTwitter = () => {
+    const text = encodeURIComponent(`Building my 🗿 PyramidMeme Empire! Join me for eternal boosts 🚀`);
+    const url = encodeURIComponent(referralLink);
+    window.open(`https://x.com/intent/tweet?text=${text}%20${url}`, '_blank');
+    playWhoosh();
+  };
+
+  const shareOnTelegram = () => {
+    const text = encodeURIComponent(`Building my 🗿 PyramidMeme Empire! Join me for eternal boosts 🚀`);
+    const url = encodeURIComponent(referralLink);
+    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+    playWhoosh();
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    showNotification('📋 COPIED!');
+    playWhoosh();
+  };
+
+  // ========== TOOLTIP ==========
+  const Tooltip = ({ id, title, description, benefits }) => {
+    if (activeTooltip !== id) return null;
+    
+    return (
+      <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)}>
+        <div className="tooltip-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="tooltip-close" onClick={() => setActiveTooltip(null)}>
+            <X size={20} />
+          </button>
+          <h3 className="tooltip-title">{title}</h3>
+          <p className="tooltip-desc">{description}</p>
+          {benefits && (
+            <div className="tooltip-benefits">
+              <h4 className="tooltip-benefits-title">Benefits:</h4>
+              {benefits.map((benefit, i) => (
+                <div key={i} className="tooltip-benefit-item">✓ {benefit}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ========== PYRAMID ==========
+  const renderPyramid = () => {
+    const rows = Math.min(Math.floor(bricks / 6) + 1, 5);
+    let moais = [];
+    
+    for (let row = 0; row < rows; row++) {
+      const moaisInRow = row + 1;
+      for (let col = 0; col < moaisInRow; col++) {
+        moais.push(
+          <div 
+            key={`${row}-${col}`}
+            className="pyramid-moai"
+            style={{
+              gridRow: row + 1,
+              gridColumn: `${5 - row + col * 2} / span 2`,
+              animation: `pop-in 0.4s ease-out ${row * 0.1 + col * 0.05}s backwards`,
+            }}
+          >
+            🗿
+          </div>
+        );
+      }
     }
     
-    // In production, this would interact with smart contract
-    // For now, simulate purchase
-    showNotification(`💳 Processing payment of $${price} USDC...`, 'info');
-    
-    setTimeout(() => {
-      switch(itemName) {
-        case 'premium':
-          setIsPremium(true);
-          setEnergy(100);
-          showNotification('✨ Premium Activated! No limits, no cooldowns!', 'success');
-          break;
-        case 'boost-x2':
-          setActiveBoosts(prev => ({
-            ...prev,
-            x2: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
-          }));
-          showNotification('🚀 2x Boost activated for 24 hours!', 'success');
-          break;
-        case 'boost-x5':
-          setActiveBoosts(prev => ({
-            ...prev,
-            x5: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
-          }));
-          showNotification('🔥 5x Boost activated for 24 hours!', 'success');
-          break;
-        case 'energy-refill':
-          setEnergy(100);
-          showNotification('⚡ Energy refilled to 100!', 'success');
-          break;
-        case 'battle-pass':
-          setHasBattlePass(true);
-          showNotification('👑 Battle Pass activated! +10% XP + Exclusive NFT!', 'success');
-          break;
-      }
-    }, 2000);
+    return moais;
   };
-
-  const showNotification = (message, type) => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  // ========== SHOP ITEMS ==========
-  const shopItems = [
-    {
-      id: 'premium',
-      name: 'Premium Activation',
-      price: 2,
-      description: 'Unlock all levels + Remove cooldown',
-      icon: '👑',
-      disabled: isPremium,
-    },
-    {
-      id: 'boost-x2',
-      name: 'Boost x2',
-      price: 0.50,
-      description: '2x XP for 24 hours',
-      icon: '⚡',
-      disabled: activeBoosts.x2 && activeBoosts.x2 > Date.now(),
-    },
-    {
-      id: 'boost-x5',
-      name: 'Boost x5',
-      price: 1.50,
-      description: '5x XP for 24 hours',
-      icon: '🔥',
-      disabled: activeBoosts.x5 && activeBoosts.x5 > Date.now(),
-    },
-    {
-      id: 'energy-refill',
-      name: 'Energy Refill',
-      price: 0.25,
-      description: '+100 Energy instantly',
-      icon: '🔋',
-      disabled: isPremium || energy === 100,
-    },
-    {
-      id: 'battle-pass',
-      name: 'Battle Pass',
-      price: 5,
-      description: 'All boosts + NFT + 10% XP',
-      icon: '🎁',
-      disabled: hasBattlePass,
-    },
-  ];
 
   // ========== RENDER ==========
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-black to-blue-900 text-white font-mono relative overflow-hidden">
-      {/* Animated Background Grid */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(139, 92, 246, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(139, 92, 246, 0.1) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-          animation: 'grid-move 20s linear infinite'
-        }}/>
+    <div className="app-wrapper">
+      
+      {/* Audio */}
+      <audio ref={el => coinSounds.current[0] = el} src="/sounds/coin-1.wav" preload="auto" />
+      <audio ref={el => coinSounds.current[1] = el} src="/sounds/coin-2.wav" preload="auto" />
+      <audio ref={el => coinSounds.current[2] = el} src="/sounds/coin-3.wav" preload="auto" />
+      <audio ref={levelUpSound} src="/sounds/levelup.wav" preload="auto" />
+      <audio ref={whooshSound} src="/sounds/whoosh.wav" preload="auto" />
+
+      {/* Background */}
+      <div className="floating-coins-bg">
+        {floatingCoins.map(coin => (
+          <img
+            key={coin.id}
+            src={`/coins/${coin.coin}.png`}
+            alt={coin.coin}
+            className="floating-coin"
+            style={{
+              left: `${coin.x}%`,
+              top: `${coin.y}%`,
+              width: `${coin.size}px`,
+              height: `${coin.size}px`,
+            }}
+          />
+        ))}
       </div>
 
-      {/* Notification */}
-      {notification && (
-        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-2xl border-2 animate-slide-in ${
-          notification.type === 'success' ? 'bg-green-500 border-green-300' :
-          notification.type === 'error' ? 'bg-red-500 border-red-300' :
-          notification.type === 'warning' ? 'bg-yellow-500 border-yellow-300' :
-          'bg-blue-500 border-blue-300'
-        }`}>
-          <p className="font-bold text-sm">{notification.message}</p>
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="relative z-10 border-b-2 border-purple-500 bg-black/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-blue-500">
-              PYRAMID MEME EMPIRE
-            </h1>
-            <p className="text-xs text-purple-300 mt-1">Stack Memes. Build Empires. Earn $PME.</p>
-          </div>
-          
-          {walletAddress ? (
-            <div className="flex items-center gap-3">
-              <div className="px-4 py-2 bg-purple-600 rounded-lg border-2 border-purple-400">
-                <p className="text-xs text-purple-200">Connected</p>
-                <p className="font-bold text-sm">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</p>
-              </div>
-              <button 
-                onClick={disconnectWallet}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg border-2 border-red-400 transition-all"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={connectWallet}
-              disabled={isConnecting}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg border-2 border-purple-400 font-bold transition-all transform hover:scale-105 disabled:opacity-50"
-            >
-              {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <nav className="relative z-10 bg-black/30 border-b border-purple-500/30">
-        <div className="container mx-auto px-4">
-          <div className="flex gap-1">
-            {[
-              { id: 'game', label: 'GAME', icon: Zap },
-              { id: 'shop', label: 'SHOP', icon: ShoppingCart },
-              { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setCurrentTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-3 font-bold transition-all ${
-                  currentTab === tab.id 
-                    ? 'bg-purple-600 border-t-4 border-purple-400' 
-                    : 'bg-transparent hover:bg-purple-900/50'
-                }`}
-              >
-                <tab.icon size={18} />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="relative z-10 container mx-auto px-4 py-8">
+      {/* Mobile Container */}
+      <div className="mobile-container">
         
-        {/* GAME TAB */}
-        {currentTab === 'game' && (
-          <div className="max-w-4xl mx-auto">
-            
-            {/* Player Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-gradient-to-br from-purple-800/50 to-purple-900/50 border-2 border-purple-500 rounded-xl p-6 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-purple-300 text-sm">LEVEL</p>
-                  {isPremium && <Crown className="text-yellow-400" size={20} />}
-                </div>
-                <p className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-                  {level}
-                </p>
-                {!isPremium && level >= 3 && (
-                  <p className="text-xs text-red-400 mt-2">⚠️ Free Max Reached</p>
-                )}
-              </div>
+        {/* Particles */}
+        {particles.map(particle => (
+          <div
+            key={particle.id}
+            className={`particle particle-${particle.type}`}
+            style={{
+              left: `${particle.x}%`,
+              top: `${particle.y}%`,
+              transform: `rotate(${particle.rotation}deg)`,
+              color: particle.color,
+            }}
+          >
+            {particle.content}
+          </div>
+        ))}
 
-              <div className="bg-gradient-to-br from-blue-800/50 to-blue-900/50 border-2 border-blue-500 rounded-xl p-6 backdrop-blur-sm">
-                <p className="text-blue-300 text-sm mb-2">XP</p>
-                <p className="text-3xl font-black">{xp.toLocaleString()}</p>
-                <div className="mt-3 bg-black/50 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-400 to-purple-500 transition-all duration-300"
-                    style={{ width: `${getXPProgress()}%` }}
-                  />
-                </div>
-                <p className="text-xs text-blue-300 mt-1">
-                  {getXPForNextLevel() - xp} XP to Level {level + 1}
-                </p>
-              </div>
-
-              {!isPremium && (
-                <div className="bg-gradient-to-br from-green-800/50 to-green-900/50 border-2 border-green-500 rounded-xl p-6 backdrop-blur-sm">
-                  <p className="text-green-300 text-sm mb-2">ENERGY</p>
-                  <p className="text-3xl font-black">{energy}/100</p>
-                  <div className="mt-3 bg-black/50 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-300"
-                      style={{ width: `${energy}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-green-300 mt-1">
-                    +1 every 30 seconds
-                  </p>
-                </div>
-              )}
-              
-              {isPremium && (
-                <div className="bg-gradient-to-br from-yellow-800/50 to-yellow-900/50 border-2 border-yellow-500 rounded-xl p-6 backdrop-blur-sm">
-                  <p className="text-yellow-300 text-sm mb-2 flex items-center gap-2">
-                    <Crown size={16} />
-                    PREMIUM ACTIVE
-                  </p>
-                  <p className="text-xl font-black">∞ ENERGY</p>
-                  <p className="text-xs text-yellow-300 mt-2">No limits. No cooldowns.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Active Boosts */}
-            {(activeBoosts.x2 || activeBoosts.x5 || hasBattlePass) && (
-              <div className="mb-8 p-4 bg-gradient-to-r from-orange-900/50 to-red-900/50 border-2 border-orange-500 rounded-xl backdrop-blur-sm">
-                <p className="text-sm font-bold mb-2 text-orange-300">🔥 ACTIVE BOOSTS:</p>
-                <div className="flex flex-wrap gap-3">
-                  {activeBoosts.x5 && activeBoosts.x5 > Date.now() && (
-                    <div className="px-3 py-1 bg-red-600 rounded-full text-sm font-bold">
-                      5x BOOST
-                    </div>
-                  )}
-                  {activeBoosts.x2 && activeBoosts.x2 > Date.now() && (
-                    <div className="px-3 py-1 bg-orange-600 rounded-full text-sm font-bold">
-                      2x BOOST
-                    </div>
-                  )}
-                  {hasBattlePass && (
-                    <div className="px-3 py-1 bg-purple-600 rounded-full text-sm font-bold flex items-center gap-1">
-                      <Crown size={14} />
-                      BATTLE PASS +10%
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Tap Area */}
-            <div className="relative">
-              <div className="text-center mb-6">
-                <p className="text-2xl font-black text-purple-300 mb-2">
-                  {getXpPerTap()} XP PER TAP
-                </p>
-                {!isPremium && !canTap && (
-                  <p className="text-sm text-yellow-400 animate-pulse">⏳ Cooldown: 2s</p>
-                )}
-              </div>
-
-              {/* Tap Button */}
-              <div className="relative flex justify-center items-center" style={{ height: '400px' }}>
-                {showXpGain && (
-                  <div 
-                    key={showXpGain.id}
-                    className="absolute top-0 text-4xl font-black text-green-400 animate-float-up pointer-events-none"
-                    style={{ left: '50%', transform: 'translateX(-50%)' }}
-                  >
-                    +{showXpGain.value}
-                  </div>
-                )}
-
-                <button
-                  onClick={handleTap}
-                  disabled={!walletAddress || (!isPremium && (!canTap || energy <= 0))}
-                  className={`relative w-64 h-64 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    tapAnimation ? 'scale-90' : 'scale-100'
-                  }`}
-                  style={{
-                    background: 'radial-gradient(circle, rgba(168,85,247,1) 0%, rgba(124,58,237,1) 50%, rgba(88,28,135,1) 100%)',
-                    boxShadow: tapAnimation 
-                      ? '0 0 60px rgba(168,85,247,0.8), inset 0 0 40px rgba(0,0,0,0.5)'
-                      : '0 0 40px rgba(168,85,247,0.6), inset 0 0 20px rgba(0,0,0,0.3)',
-                    border: '6px solid rgba(168,85,247,0.5)'
-                  }}
-                >
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="text-8xl mb-2 animate-pulse">🔺</div>
-                    <p className="text-2xl font-black tracking-wider">TAP</p>
-                  </div>
-                </button>
-              </div>
-
-              {!walletAddress && (
-                <div className="text-center mt-8">
-                  <p className="text-yellow-400 text-sm">⚠️ Connect your wallet to start playing</p>
-                </div>
-              )}
-            </div>
+        {/* Fireworks */}
+        {showFireworks && (
+          <div className="fireworks">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="firework" style={{ '--i': i }} />
+            ))}
           </div>
         )}
 
-        {/* SHOP TAB */}
-        {currentTab === 'shop' && (
-          <div className="max-w-5xl mx-auto">
-            <h2 className="text-3xl font-black mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-              💎 POWER-UP SHOP
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {shopItems.map(item => (
-                <div 
-                  key={item.id}
-                  className={`bg-gradient-to-br from-purple-900/50 to-black border-2 rounded-xl p-6 backdrop-blur-sm transition-all hover:scale-105 ${
-                    item.disabled 
-                      ? 'border-gray-600 opacity-50' 
-                      : 'border-purple-500 hover:border-pink-500'
-                  }`}
-                >
-                  <div className="text-6xl mb-4">{item.icon}</div>
-                  <h3 className="text-xl font-bold mb-2">{item.name}</h3>
-                  <p className="text-sm text-gray-300 mb-4">{item.description}</p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-2xl font-black text-green-400">
-                      ${item.price} USDC
-                    </p>
-                    <button
-                      onClick={() => purchaseItem(item.id, item.price)}
-                      disabled={item.disabled || !walletAddress}
-                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        {/* Notification */}
+        {notification && (
+          <div className="notification">{notification}</div>
+        )}
+
+        {/* Tooltips */}
+        <Tooltip 
+          id="premium"
+          title="👑 PREMIUM"
+          description="Unlock unlimited potential with no restrictions."
+          benefits={[
+            'Unlimited energy - tap forever',
+            'No cooldown between taps',
+            'Unlock all levels (no level 3 cap)',
+            'Permanent unlock',
+          ]}
+        />
+        
+        <Tooltip 
+          id="battlepass"
+          title="👑 BATTLE PASS"
+          description="The ultimate PyramidMeme experience."
+          benefits={[
+            'ALL boosts included (X2, X5)',
+            'Exclusive NFT reward',
+            '+10% XP boost (permanent)',
+            'Special emojis',
+            'Unlimited energy & no cooldown',
+          ]}
+        />
+        
+        <Tooltip 
+          id="boostx2"
+          title="⚡ BOOST X2"
+          description="Double your brick gains for 24 hours."
+          benefits={[
+            '2X bricks per tap',
+            'Lasts 24 hours',
+            'Stackable with other boosts',
+          ]}
+        />
+        
+        <Tooltip 
+          id="boostx5"
+          title="🔥 BOOST X5"
+          description="Massive 5X multiplier for 24 hours."
+          benefits={[
+            '5X bricks per tap',
+            'Lasts 24 hours',
+            'Best value for grinding',
+          ]}
+        />
+        
+        <Tooltip 
+          id="energy"
+          title="🔋 ENERGY REFILL"
+          description="Instantly restore your energy."
+          benefits={[
+            'Instant +100 energy',
+            'Only needed for free users',
+            'Premium users have unlimited',
+          ]}
+        />
+
+        {/* Header */}
+        <header className="header">
+          <div className="logo">PYRAMIDMEME</div>
+          {walletAddress ? (
+            <div className="wallet-badge">
+              {walletAddress.slice(0, 4)}...{walletAddress.slice(-3)}
+            </div>
+          ) : (
+            <button onClick={connectWallet} disabled={isConnecting} className="connect-btn-small">
+              {isConnecting ? 'CONNECTING...' : 'CONNECT'}
+            </button>
+          )}
+        </header>
+
+        {/* Main Content */}
+        <main className="main-content">
+          
+          {/* GAME TAB */}
+          {currentTab === 'game' && (
+            <div className="game-view">
+              
+              {/* Stats */}
+              <div className="stats-simple">
+                <div className="stat-box">
+                  <div className="stat-emoji">💎</div>
+                  <div className="stat-label">BRICKS</div>
+                  <div className="stat-value neon-green">{displayBricks}</div>
+                </div>
+                
+                <div className="stat-box">
+                  <div className="stat-emoji">🏆</div>
+                  <div className="stat-label">LEVEL</div>
+                  <div className="stat-value neon-yellow">{level}</div>
+                </div>
+                
+                <div className="stat-box">
+                  <div className="stat-emoji">💰</div>
+                  <div className="stat-label">$PME</div>
+                  <div className="stat-value neon-purple">TBA</div>
+                </div>
+                
+                <div className="stat-box">
+                  <div className="stat-emoji">👥</div>
+                  <div className="stat-label">REFERRALS</div>
+                  <div className="stat-value neon-cyan">{referrals}</div>
+                </div>
+              </div>
+
+              {/* Energy Bar (only show for free users) */}
+              {!isPremium && !hasBattlePass && (
+                <div className="energy-bar-container">
+                  <div className="energy-info">
+                    <div className="energy-label">
+                      <Zap size={14} className="energy-icon" />
+                      ENERGY
+                    </div>
+                    <div className="energy-value">{energy}/{maxEnergy}</div>
+                  </div>
+                  <div className="energy-bar">
+                    <div 
+                      className="energy-fill" 
+                      style={{ width: `${(energy / maxEnergy) * 100}%` }}
+                    />
+                  </div>
+                  <div className="energy-hint">+1 every 30s or go Premium!</div>
+                </div>
+              )}
+
+              {/* TAP AREA */}
+              <div 
+                id="tap-area"
+                className="tap-area-full"
+                onClick={handleTap}
+              >
+                <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''}`}>
+                  <div className="pyramid-grid">
+                    {renderPyramid()}
+                  </div>
+                </div>
+                
+                <div className="level-badge">
+                  Level {level}
+                </div>
+                
+                <div className="tap-hint">
+                  tap to stack
+                </div>
+              </div>
+
+              {/* Progress */}
+              <div className="progress-section">
+                <div className="progress-info">
+                  <span className="progress-text">Level {level}</span>
+                  <span className="progress-text">{bricks % 100}/100 to next</span>
+                </div>
+                <div className="progress-bar-wrap">
+                  <div className="progress-bar-fill" style={{ width: `${(bricks % 100)}%` }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ARENA TAB */}
+          {currentTab === 'arena' && (
+            <div className="arena-view">
+              <div className="arena-scroll">
+                <h2 className="arena-title">🏆 TAP ARENA</h2>
+                <p className="arena-subtitle">Battle for $PME - Top Tappers Win!</p>
+                
+                <div className="leaderboard">
+                  <div className="leaderboard-header">
+                    <span>RANK</span>
+                    <span>PLAYER</span>
+                    <span>TAPS</span>
+                    <span>WIN</span>
+                  </div>
+                  
+                  {leaderboard.map((player) => (
+                    <div key={player.rank} className={`leaderboard-row ${player.rank <= 3 ? 'top-three' : ''}`}>
+                      <div className="rank-cell">
+                        {player.rank === 1 && '🥇'}
+                        {player.rank === 2 && '🥈'}
+                        {player.rank === 3 && '🥉'}
+                        {player.rank > 3 && `#${player.rank}`}
+                      </div>
+                      <div className="name-cell">{player.name}</div>
+                      <div className="taps-cell">{player.taps.toLocaleString()}</div>
+                      <div className="win-cell neon-green">{player.winnings}</div>
+                    </div>
+                  ))}
+                  
+                  {/* User's position (if not in top 10) */}
+                  <div className="leaderboard-divider">...</div>
+                  <div className="leaderboard-row user-row">
+                    <div className="rank-cell">#{userRank}</div>
+                    <div className="name-cell">You</div>
+                    <div className="taps-cell">{bricks}</div>
+                    <div className="win-cell">-</div>
+                  </div>
+                </div>
+
+                <div className="arena-info">
+                  <p>💰 Top 10 share 70% of weekly $PME pool</p>
+                  <p>⚡ Keep tapping to climb the ranks!</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* QUESTS TAB */}
+          {currentTab === 'quests' && (
+            <div className="quests-view">
+              <div className="quests-scroll">
+                <h2 className="quests-title">🎯 DAILY QUESTS</h2>
+                <p className="quests-subtitle">Complete tasks to earn $PME rewards!</p>
+                
+                <div className="quests-list">
+                  {quests.map((quest) => (
+                    <div 
+                      key={quest.id} 
+                      className={`quest-card ${quest.completed ? 'quest-completed' : ''}`}
+                      onClick={() => handleQuestClick(quest)}
                     >
-                      {item.disabled ? 'OWNED' : 'BUY'}
+                      <div className="quest-icon">{quest.icon}</div>
+                      <div className="quest-info">
+                        <h3 className="quest-title">{quest.title}</h3>
+                        <p className="quest-desc">{quest.description}</p>
+                      </div>
+                      <div className="quest-reward">
+                        {quest.completed ? (
+                          <div className="quest-check">✓</div>
+                        ) : (
+                          <div className="quest-reward-text">
+                            <div className="reward-amount">{quest.reward}</div>
+                            <div className="reward-label">$PME</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="quests-info">
+                  <p>🎁 Reward amounts are revealed upon completion</p>
+                  <p>🔄 Quests reset daily at 00:00 UTC</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SHOP TAB */}
+          {currentTab === 'shop' && (
+            <div className="shop-view">
+              <div className="shop-scroll">
+                
+                {/* Battle Pass - Featured */}
+                <div className="featured-item">
+                  <div className="item-header">
+                    <div className="item-icon-large">👑</div>
+                    <div>
+                      <div className="item-title">BATTLE PASS</div>
+                      <div className="item-subtitle">SEASON 1 - UNLIMITED POWER</div>
+                    </div>
+                    <button 
+                      className="info-btn"
+                      onClick={() => setActiveTooltip(activeTooltip === 'battlepass' ? null : 'battlepass')}
+                    >
+                      <Info size={18} />
+                    </button>
+                  </div>
+                  <div className="item-price-big">
+                    <span className="price-value">$5</span>
+                    <span className="price-period">/30 DAYS</span>
+                  </div>
+                  <button className="buy-btn-featured" onClick={playWhoosh}>
+                    GET BATTLE PASS
+                  </button>
+                </div>
+
+                {/* Premium */}
+                <div className="shop-item-row">
+                  <div className="item-left">
+                    <div className="item-icon-small">👑</div>
+                    <div className="item-details">
+                      <div className="item-name">PREMIUM</div>
+                      <div className="item-brief">Unlimited tapping forever</div>
+                    </div>
+                  </div>
+                  <div className="item-right">
+                    <button 
+                      className="info-btn-small"
+                      onClick={() => setActiveTooltip(activeTooltip === 'premium' ? null : 'premium')}
+                    >
+                      <Info size={16} />
+                    </button>
+                    <div className="item-price-small">$2</div>
+                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                  </div>
+                </div>
+
+                {/* Boost X2 */}
+                <div className="shop-item-row">
+                  <div className="item-left">
+                    <div className="item-icon-small">⚡</div>
+                    <div className="item-details">
+                      <div className="item-name">BOOST X2</div>
+                      <div className="item-brief">2X bricks for 24h</div>
+                    </div>
+                  </div>
+                  <div className="item-right">
+                    <button 
+                      className="info-btn-small"
+                      onClick={() => setActiveTooltip(activeTooltip === 'boostx2' ? null : 'boostx2')}
+                    >
+                      <Info size={16} />
+                    </button>
+                    <div className="item-price-small">$0.50</div>
+                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                  </div>
+                </div>
+
+                {/* Boost X5 */}
+                <div className="shop-item-row">
+                  <div className="item-left">
+                    <div className="item-icon-small">🔥</div>
+                    <div className="item-details">
+                      <div className="item-name">BOOST X5</div>
+                      <div className="item-brief">5X bricks for 24h</div>
+                    </div>
+                  </div>
+                  <div className="item-right">
+                    <button 
+                      className="info-btn-small"
+                      onClick={() => setActiveTooltip(activeTooltip === 'boostx5' ? null : 'boostx5')}
+                    >
+                      <Info size={16} />
+                    </button>
+                    <div className="item-price-small">$1.50</div>
+                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                  </div>
+                </div>
+
+                {/* Energy Refill */}
+                <div className="shop-item-row">
+                  <div className="item-left">
+                    <div className="item-icon-small">🔋</div>
+                    <div className="item-details">
+                      <div className="item-name">ENERGY REFILL</div>
+                      <div className="item-brief">Instant +100 energy</div>
+                    </div>
+                  </div>
+                  <div className="item-right">
+                    <button 
+                      className="info-btn-small"
+                      onClick={() => setActiveTooltip(activeTooltip === 'energy' ? null : 'energy')}
+                    >
+                      <Info size={16} />
+                    </button>
+                    <div className="item-price-small">$0.25</div>
+                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* REFERRALS TAB */}
+          {currentTab === 'referrals' && (
+            <div className="referrals-view">
+              <div className="referrals-scroll">
+                <h3 className="section-title">UNLIMITED BOOSTS 🗿</h3>
+                
+                <div className="referral-card">
+                  <div className="referral-label">YOUR LINK</div>
+                  <div className="referral-link-box">
+                    {referralLink || 'CONNECT WALLET'}
+                  </div>
+                  <div className="action-btns">
+                    <button onClick={copyLink} disabled={!referralLink} className="action-btn">
+                      <Copy size={16} />
+                      COPY
+                    </button>
+                    <button onClick={shareOnTwitter} disabled={!referralLink} className="action-btn action-btn-x">
+                      SHARE X
+                    </button>
+                    <button onClick={shareOnTelegram} disabled={!referralLink} className="action-btn action-btn-tg">
+                      SHARE TG
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {!walletAddress && (
-              <div className="mt-8 p-6 bg-yellow-900/30 border-2 border-yellow-500 rounded-xl text-center">
-                <AlertCircle className="mx-auto mb-2 text-yellow-400" size={32} />
-                <p className="text-yellow-400 font-bold">Connect your wallet to purchase items</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* LEADERBOARD TAB */}
-        {currentTab === 'leaderboard' && (
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-black mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">
-              🏆 TOP PYRAMID BUILDERS
-            </h2>
-            
-            <div className="space-y-3">
-              {leaderboard.map((player, index) => (
-                <div 
-                  key={player.address}
-                  className={`flex items-center justify-between p-5 rounded-xl border-2 backdrop-blur-sm transition-all hover:scale-102 ${
-                    index === 0 ? 'bg-gradient-to-r from-yellow-900/50 to-orange-900/50 border-yellow-500' :
-                    index === 1 ? 'bg-gradient-to-r from-gray-700/50 to-gray-800/50 border-gray-400' :
-                    index === 2 ? 'bg-gradient-to-r from-orange-900/50 to-orange-800/50 border-orange-600' :
-                    'bg-purple-900/30 border-purple-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`text-3xl font-black ${
-                      index === 0 ? 'text-yellow-400' :
-                      index === 1 ? 'text-gray-300' :
-                      index === 2 ? 'text-orange-500' :
-                      'text-purple-400'
-                    }`}>
-                      #{index + 1}
-                    </div>
-                    <div>
-                      <p className="font-bold text-lg">{player.address}</p>
-                      <p className="text-sm text-gray-400">Level {player.level}</p>
-                    </div>
+                <div className="referral-stats">
+                  <div className="ref-stat">
+                    <div className="ref-stat-value">0</div>
+                    <div className="ref-stat-label">INVITED</div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-                      {player.xp.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-400">XP</p>
+                  <div className="ref-stat">
+                    <div className="ref-stat-value neon-green">0</div>
+                    <div className="ref-stat-label">ACTIVE</div>
+                  </div>
+                  <div className="ref-stat">
+                    <div className="ref-stat-value neon-purple">+0%</div>
+                    <div className="ref-stat-label">BOOST</div>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {walletAddress && (
-              <div className="mt-8 p-6 bg-gradient-to-r from-blue-900/50 to-purple-900/50 border-2 border-blue-500 rounded-xl">
-                <p className="text-sm text-blue-300 mb-2">YOUR RANK</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-black">#{leaderboard.length + 1}</p>
-                    <p className="text-sm text-gray-400">Level {level}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-                      {xp.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-400">XP</p>
-                  </div>
+                <div className="referral-info-box">
+                  <p className="info-text">
+                    +10% boost per referral who activates premium. Unlimited potential!
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-      </main>
+            </div>
+          )}
+        </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 mt-16 border-t-2 border-purple-500 bg-black/50 backdrop-blur-sm py-6">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-purple-300 mb-2">
-            Powered by Base Network | Built for Degens
-          </p>
-          <p className="text-xs text-gray-500">
-            Contract: 0x... (Coming Soon) | Not Financial Advice
-          </p>
-        </div>
-      </footer>
+        {/* Bottom Nav - 4 tabs now */}
+        <nav className="bottom-nav">
+          <button 
+            className={`nav-btn ${currentTab === 'game' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('game'); playWhoosh(); }}
+          >
+            <Gamepad2 size={22} />
+            <span>GAME</span>
+          </button>
+          <button 
+            className={`nav-btn ${currentTab === 'arena' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('arena'); playWhoosh(); }}
+          >
+            <Trophy size={22} />
+            <span>ARENA</span>
+          </button>
+          <button 
+            className={`nav-btn ${currentTab === 'quests' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('quests'); playWhoosh(); }}
+          >
+            <Zap size={22} />
+            <span>QUESTS</span>
+          </button>
+          <button 
+            className={`nav-btn ${currentTab === 'shop' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('shop'); playWhoosh(); }}
+          >
+            <ShoppingBag size={22} />
+            <span>SHOP</span>
+          </button>
+          <button 
+            className={`nav-btn ${currentTab === 'referrals' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('referrals'); playWhoosh(); }}
+          >
+            <Users size={22} />
+            <span>REFS</span>
+          </button>
+        </nav>
+      </div>
 
-      {/* CSS Animations */}
+      {/* CSS - Continuing in next message due to length */}
       <style jsx>{`
-        @keyframes grid-move {
-          0% { transform: translateY(0); }
-          100% { transform: translateY(50px); }
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          -webkit-tap-highlight-color: transparent;
         }
 
-        @keyframes slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+        .app-wrapper {
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh;
+          background: #000000;
+          color: white;
+          font-family: 'Press Start 2P', monospace;
+          position: fixed;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
-        @keyframes float-up {
+        .floating-coins-bg {
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .floating-coin {
+          position: absolute;
+          opacity: 0.08;
+          filter: drop-shadow(0 0 10px rgba(255, 0, 255, 0.2));
+          animation: float-rotate-slow 20s linear infinite;
+        }
+
+        @keyframes float-rotate-slow {
+          0%, 100% { transform: rotate(0deg); }
+          50% { transform: rotate(180deg); }
+        }
+
+        .mobile-container {
+          width: 100%;
+          max-width: 480px;
+          height: 100%;
+          max-height: 100vh;
+          max-height: 100dvh;
+          background: #0A0A0A;
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 0 60px rgba(255, 0, 255, 0.3);
+        }
+
+        .particle {
+          position: absolute;
+          pointer-events: none;
+          z-index: 100;
+          font-size: 28px;
+          font-weight: bold;
+          opacity: 1;
+          animation: particle-fade 3.5s ease-out forwards;
+        }
+
+        .particle-confetti {
+          font-size: 24px;
+          filter: drop-shadow(0 0 8px currentColor);
+        }
+
+        .particle-emoji {
+          font-size: 32px;
+          filter: drop-shadow(0 0 10px rgba(255, 255, 0, 0.9));
+        }
+
+        @keyframes particle-fade {
+          0% { opacity: 1; }
+          70% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+
+        .fireworks {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 99;
+        }
+
+        .firework {
+          position: absolute;
+          width: 4px;
+          height: 4px;
+          background: #FF00FF;
+          border-radius: 50%;
+          box-shadow: 0 0 20px #FF00FF;
+          left: 50%;
+          top: 50%;
+          animation: firework-explode 2s ease-out infinite;
+          animation-delay: calc(var(--i) * 0.1s);
+        }
+
+        @keyframes firework-explode {
           0% {
-            transform: translate(-50%, 0);
+            transform: translate(0, 0) scale(1);
             opacity: 1;
           }
           100% {
-            transform: translate(-50%, -100px);
+            transform: translate(
+              calc(cos(calc(var(--i) * 45deg)) * 200px),
+              calc(sin(calc(var(--i) * 45deg)) * 200px)
+            ) scale(0);
             opacity: 0;
           }
         }
 
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
+        .notification {
+          position: absolute;
+          top: 70px;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 12px 20px;
+          background: linear-gradient(135deg, #FF00FF, #00FFFF);
+          border: 2px solid #FFFF00;
+          border-radius: 8px;
+          font-size: 10px;
+          z-index: 1000;
+          animation: notification-pop 0.3s ease-out;
+          box-shadow: 0 0 30px rgba(255, 0, 255, 0.8);
+          white-space: nowrap;
+          max-width: 90%;
         }
 
-        .animate-float-up {
-          animation: float-up 1s ease-out forwards;
+        @keyframes notification-pop {
+          0% { transform: translateX(-50%) scale(0.8); opacity: 0; }
+          100% { transform: translateX(-50%) scale(1); opacity: 1; }
+        }
+
+        /* TOOLTIP SYSTEM */
+        .tooltip-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.8);
+          backdrop-filter: blur(4px);
+          z-index: 200;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .tooltip-modal {
+          background: linear-gradient(135deg, rgba(20, 20, 20, 0.95), rgba(40, 0, 40, 0.95));
+          border: 2px solid #FF00FF;
+          border-radius: 16px;
+          padding: 24px;
+          max-width: 90%;
+          max-height: 80%;
+          overflow-y: auto;
+          box-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
+          position: relative;
+          animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        .tooltip-close {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          background: rgba(255, 0, 255, 0.2);
+          border: 1.5px solid #FF00FF;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: white;
+          transition: all 0.3s;
+        }
+
+        .tooltip-close:hover {
+          background: rgba(255, 0, 255, 0.4);
+          transform: scale(1.1);
+        }
+
+        .tooltip-title {
+          font-size: 16px;
+          margin-bottom: 12px;
+          background: linear-gradient(90deg, #FF00FF, #00FFFF);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .tooltip-desc {
+          font-size: 10px;
+          color: #aaa;
+          line-height: 1.6;
+          margin-bottom: 16px;
+        }
+
+        .tooltip-benefits {
+          background: rgba(0, 255, 0, 0.05);
+          border: 1.5px solid rgba(0, 255, 0, 0.3);
+          border-radius: 12px;
+          padding: 14px;
+        }
+
+        .tooltip-benefits-title {
+          font-size: 11px;
+          color: #00FF00;
+          margin-bottom: 10px;
+        }
+
+        .tooltip-benefit-item {
+          font-size: 9px;
+          color: #00FF00;
+          margin: 6px 0;
+          padding-left: 4px;
+        }
+
+        .header {
+          height: 56px;
+          background: rgba(10, 10, 10, 0.95);
+          backdrop-filter: blur(10px);
+          border-bottom: 2px solid #FF00FF;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 16px;
+          flex-shrink: 0;
+          box-shadow: 0 2px 15px rgba(255, 0, 255, 0.3);
+        }
+
+        .logo {
+          font-size: 12px;
+          background: linear-gradient(90deg, #FF00FF, #00FFFF);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .wallet-badge {
+          padding: 6px 12px;
+          background: rgba(255, 0, 255, 0.15);
+          border: 1.5px solid #FF00FF;
+          border-radius: 6px;
+          font-size: 9px;
+        }
+
+        .connect-btn-small {
+          padding: 6px 12px;
+          background: linear-gradient(135deg, #FF00FF, #00FFFF);
+          border: 2px solid #FFFF00;
+          border-radius: 6px;
+          color: black;
+          font-family: inherit;
+          font-size: 9px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+
+        .main-content {
+          flex: 1;
+          overflow: hidden;
+          position: relative;
+        }
+
+        /* GAME VIEW */
+        .game-view {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          padding: 16px;
+        }
+
+        .stats-simple {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 8px;
+          margin-bottom: 12px;
+          flex-shrink: 0;
+        }
+
+        .stat-box {
+          background: rgba(20, 20, 20, 0.6);
+          border: 1.5px solid rgba(255, 0, 255, 0.3);
+          border-radius: 12px;
+          padding: 10px 6px;
+          text-align: center;
+          transition: all 0.3s;
+        }
+
+        .stat-box:hover {
+          border-color: rgba(255, 0, 255, 0.6);
+          box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
+        }
+
+        .stat-emoji {
+          font-size: 24px;
+          margin-bottom: 6px;
+          animation: pulse-subtle 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-subtle {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+        }
+
+        .stat-label {
+          font-size: 6px;
+          color: #888;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+        }
+
+        .stat-value {
+          font-size: 16px;
+          font-weight: bold;
+        }
+
+        .neon-green {
+          color: #00FF00;
+          text-shadow: 0 0 10px #00FF00;
+        }
+
+        .neon-yellow {
+          color: #FFFF00;
+          text-shadow: 0 0 10px #FFFF00;
+        }
+
+        .neon-purple {
+          color: #FF00FF;
+          text-shadow: 0 0 10px #FF00FF;
+        }
+
+        .neon-cyan {
+          color: #00FFFF;
+          text-shadow: 0 0 10px #00FFFF;
+        }
+
+        /* ENERGY BAR */
+        .energy-bar-container {
+          background: rgba(20, 20, 20, 0.8);
+          border: 1.5px solid rgba(255, 255, 0, 0.4);
+          border-radius: 12px;
+          padding: 10px;
+          margin-bottom: 12px;
+          flex-shrink: 0;
+        }
+
+        .energy-info {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+
+        .energy-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 9px;
+          color: #FFFF00;
+        }
+
+        .energy-icon {
+          color: #FFFF00;
+        }
+
+        .energy-value {
+          font-size: 11px;
+          color: #FFFF00;
+          font-weight: bold;
+        }
+
+        .energy-bar {
+          height: 10px;
+          background: rgba(0, 0, 0, 0.6);
+          border-radius: 10px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 0, 0.3);
+        }
+
+        .energy-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #FFFF00, #FF8800);
+          border-radius: 10px;
+          transition: width 0.5s ease;
+          box-shadow: 0 0 10px rgba(255, 255, 0, 0.6);
+        }
+
+        .energy-hint {
+          margin-top: 6px;
+          font-size: 7px;
+          color: #666;
+          text-align: center;
+        }
+
+        .tap-area-full {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          touch-action: manipulation;
+          -webkit-user-select: none;
+          user-select: none;
+          min-height: 0;
+        }
+
+        .pyramid-container {
+          transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .pyramid-pulse {
+          animation: pyramid-pulse-anim 0.3s ease-in-out;
+        }
+
+        @keyframes pyramid-pulse-anim {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.15); }
+        }
+
+        .pyramid-grid {
+          display: grid;
+          grid-template-columns: repeat(9, 32px);
+          grid-template-rows: repeat(5, 48px);
+          gap: 4px;
+          justify-content: center;
+          align-items: end;
+        }
+
+        .pyramid-moai {
+          font-size: 38px;
+          text-align: center;
+          filter: drop-shadow(0 0 10px rgba(255, 0, 255, 0.8));
+        }
+
+        @keyframes pop-in {
+          0% {
+            transform: scale(0) rotate(0deg);
+            opacity: 0;
+          }
+          50% {
+            transform: scale(1.3) rotate(180deg);
+          }
+          100% {
+            transform: scale(1) rotate(360deg);
+            opacity: 1;
+          }
+        }
+
+        .level-badge {
+          margin-top: 16px;
+          padding: 8px 20px;
+          background: linear-gradient(135deg, #FFFF00, #FF8800);
+          border: 2px solid #FFFF00;
+          border-radius: 20px;
+          font-size: 12px;
+          color: black;
+          font-weight: bold;
+          box-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+        }
+
+        .tap-hint {
+          margin-top: 12px;
+          font-size: 10px;
+          color: #666;
+          animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 1; }
+        }
+
+        .progress-section {
+          flex-shrink: 0;
+          padding: 12px 0 0;
+        }
+
+        .progress-info {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 8px;
+          padding: 0 4px;
+        }
+
+        .progress-text {
+          font-size: 8px;
+          color: #888;
+        }
+
+        .progress-bar-wrap {
+          height: 14px;
+          background: rgba(20, 20, 20, 0.6);
+          border: 1.5px solid rgba(255, 0, 255, 0.4);
+          border-radius: 20px;
+          overflow: hidden;
+          padding: 2px;
+        }
+
+        .progress-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #00FF00, #FFFF00, #FF00FF);
+          border-radius: 20px;
+          transition: width 0.3s ease;
+          box-shadow: 0 0 12px rgba(0, 255, 0, 0.6);
+        }
+
+        /* ARENA VIEW */
+        .arena-view,
+        .quests-view,
+        .shop-view,
+        .referrals-view {
+          height: 100%;
+          overflow: hidden;
+        }
+
+        .arena-scroll,
+        .quests-scroll,
+        .shop-scroll,
+        .referrals-scroll {
+          height: 100%;
+          overflow-y: auto;
+          padding: 16px;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .arena-title,
+        .quests-title {
+          text-align: center;
+          font-size: 16px;
+          margin-bottom: 8px;
+          background: linear-gradient(90deg, #FFFF00, #FF00FF);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .arena-subtitle,
+        .quests-subtitle {
+          text-align: center;
+          font-size: 9px;
+          color: #888;
+          margin-bottom: 20px;
+        }
+
+        .leaderboard {
+          background: rgba(20, 20, 20, 0.8);
+          border: 2px solid rgba(255, 0, 255, 0.3);
+          border-radius: 12px;
+          overflow: hidden;
+          margin-bottom: 20px;
+        }
+
+        .leaderboard-header {
+          display: grid;
+          grid-template-columns: 60px 1fr 80px 60px;
+          gap: 8px;
+          padding: 12px;
+          background: rgba(255, 0, 255, 0.1);
+          border-bottom: 1.5px solid rgba(255, 0, 255, 0.3);
+          font-size: 8px;
+          color: #888;
+          text-transform: uppercase;
+        }
+
+        .leaderboard-row {
+          display: grid;
+          grid-template-columns: 60px 1fr 80px 60px;
+          gap: 8px;
+          padding: 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          font-size: 10px;
+          transition: all 0.3s;
+        }
+
+        .leaderboard-row:last-child {
+          border-bottom: none;
+        }
+
+        .leaderboard-row:hover {
+          background: rgba(255, 0, 255, 0.05);
+        }
+
+        .top-three {
+          background: linear-gradient(90deg, rgba(255, 215, 0, 0.1), transparent);
+        }
+
+        .user-row {
+          background: rgba(0, 255, 255, 0.1);
+          border-top: 2px solid rgba(0, 255, 255, 0.4);
+        }
+
+        .rank-cell {
+          font-size: 14px;
+          text-align: center;
+        }
+
+        .name-cell {
+          color: #fff;
+        }
+
+        .taps-cell {
+          color: #888;
+          text-align: right;
+        }
+
+        .win-cell {
+          text-align: right;
+        }
+
+        .leaderboard-divider {
+          padding: 8px;
+          text-align: center;
+          color: #666;
+          font-size: 16px;
+        }
+
+        .arena-info {
+          background: rgba(0, 255, 0, 0.05);
+          border: 1.5px solid rgba(0, 255, 0, 0.3);
+          border-radius: 10px;
+          padding: 14px;
+          font-size: 9px;
+          color: #00FF00;
+          line-height: 1.6;
+        }
+
+        .arena-info p {
+          margin: 6px 0;
+        }
+
+        /* QUESTS VIEW */
+        .quests-list {
+          margin-bottom: 20px;
+        }
+
+        .quest-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px;
+          background: rgba(20, 20, 20, 0.8);
+          border: 1.5px solid rgba(255, 0, 255, 0.3);
+          border-radius: 12px;
+          margin-bottom: 10px;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+
+        .quest-card:hover {
+          border-color: rgba(255, 0, 255, 0.6);
+          box-shadow: 0 0 20px rgba(255, 0, 255, 0.2);
+          transform: translateY(-2px);
+        }
+
+        .quest-completed {
+          background: rgba(0, 255, 0, 0.05);
+          border-color: rgba(0, 255, 0, 0.4);
+          opacity: 0.6;
+          cursor: default;
+        }
+
+        .quest-completed:hover {
+          transform: none;
+        }
+
+        .quest-icon {
+          font-size: 32px;
+          flex-shrink: 0;
+        }
+
+        .quest-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .quest-title {
+          font-size: 11px;
+          margin-bottom: 4px;
+          color: #fff;
+        }
+
+        .quest-desc {
+          font-size: 8px;
+          color: #888;
+        }
+
+        .quest-reward {
+          flex-shrink: 0;
+          text-align: right;
+        }
+
+        .quest-check {
+          font-size: 24px;
+          color: #00FF00;
+        }
+
+        .quest-reward-text {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+        }
+
+        .reward-amount {
+          font-size: 14px;
+          color: #FFFF00;
+          font-weight: bold;
+        }
+
+        .reward-label {
+          font-size: 7px;
+          color: #888;
+        }
+
+        .quests-info {
+          background: rgba(0, 255, 255, 0.05);
+          border: 1.5px solid rgba(0, 255, 255, 0.3);
+          border-radius: 10px;
+          padding: 14px;
+          font-size: 9px;
+          color: #00FFFF;
+          line-height: 1.6;
+        }
+
+        .quests-info p {
+          margin: 6px 0;
+        }
+
+        /* SHOP VIEW - NEW DESIGN */
+        .featured-item {
+          background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(0, 255, 255, 0.2));
+          border: 2.5px solid;
+          border-image: linear-gradient(135deg, #FFFF00, #FF00FF) 1;
+          border-radius: 16px;
+          padding: 18px;
+          margin-bottom: 20px;
+          box-shadow: 0 0 30px rgba(255, 0, 255, 0.4);
+        }
+
+        .item-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .item-icon-large {
+          font-size: 48px;
+          flex-shrink: 0;
+        }
+
+        .item-title {
+          font-size: 15px;
+          color: #FFFF00;
+          text-shadow: 0 0 10px #FFFF00;
+        }
+
+        .item-subtitle {
+          font-size: 8px;
+          color: #888;
+          margin-top: 4px;
+        }
+
+        .info-btn {
+          margin-left: auto;
+          background: rgba(0, 255, 255, 0.2);
+          border: 1.5px solid #00FFFF;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: #00FFFF;
+          transition: all 0.3s;
+          flex-shrink: 0;
+        }
+
+        .info-btn:hover {
+          background: rgba(0, 255, 255, 0.4);
+          transform: scale(1.1);
+        }
+
+        .item-price-big {
+          display: flex;
+          align-items: baseline;
+          justify-content: center;
+          gap: 6px;
+          margin: 16px 0;
+        }
+
+        .price-value {
+          font-size: 32px;
+          color: #00FF00;
+          text-shadow: 0 0 20px #00FF00;
+        }
+
+        .price-period {
+          font-size: 10px;
+          color: #888;
+        }
+
+        .buy-btn-featured {
+          width: 100%;
+          padding: 16px;
+          background: linear-gradient(135deg, #FFFF00, #FF00FF);
+          border: none;
+          border-radius: 12px;
+          font-family: inherit;
+          font-size: 14px;
+          color: black;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 0 30px rgba(255, 255, 0, 0.6);
+          transition: all 0.3s;
+        }
+
+        .buy-btn-featured:active {
+          transform: scale(0.97);
+        }
+
+        .shop-item-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px;
+          background: rgba(20, 20, 20, 0.8);
+          border: 1.5px solid rgba(255, 0, 255, 0.3);
+          border-radius: 12px;
+          margin-bottom: 12px;
+          transition: all 0.3s;
+        }
+
+        .shop-item-row:hover {
+          border-color: rgba(255, 0, 255, 0.6);
+          box-shadow: 0 0 20px rgba(255, 0, 255, 0.2);
+        }
+
+        .item-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .item-icon-small {
+          font-size: 32px;
+          flex-shrink: 0;
+        }
+
+        .item-details {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .item-name {
+          font-size: 11px;
+          color: #00FFFF;
+          margin-bottom: 4px;
+        }
+
+        .item-brief {
+          font-size: 8px;
+          color: #888;
+        }
+
+        .item-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .info-btn-small {
+          background: rgba(0, 255, 255, 0.2);
+          border: 1.5px solid #00FFFF;
+          border-radius: 50%;
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: #00FFFF;
+          transition: all 0.3s;
+          flex-shrink: 0;
+        }
+
+        .info-btn-small:hover {
+          background: rgba(0, 255, 255, 0.4);
+          transform: scale(1.1);
+        }
+
+        .item-price-small {
+          font-size: 13px;
+          color: #00FF00;
+          text-shadow: 0 0 10px #00FF00;
+          min-width: 50px;
+          text-align: right;
+        }
+
+        .buy-btn-small {
+          padding: 8px 14px;
+          background: linear-gradient(135deg, #FFFF00, #FF00FF);
+          border: none;
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 9px;
+          color: black;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+
+        .buy-btn-small:active {
+          transform: scale(0.95);
+        }
+
+        /* REFERRALS VIEW */
+        .section-title {
+          text-align: center;
+          font-size: 15px;
+          margin-bottom: 18px;
+          background: linear-gradient(90deg, #FFFF00, #FF00FF);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .referral-card {
+          background: rgba(20, 20, 20, 0.8);
+          border: 2px solid #FF00FF;
+          border-radius: 12px;
+          padding: 14px;
+          margin-bottom: 18px;
+        }
+
+        .referral-label {
+          font-size: 9px;
+          color: #888;
+          margin-bottom: 10px;
+        }
+
+        .referral-link-box {
+          padding: 12px;
+          background: black;
+          border: 2px solid #00FFFF;
+          border-radius: 8px;
+          font-size: 8px;
+          word-break: break-all;
+          margin-bottom: 14px;
+          color: #00FFFF;
+          min-height: 38px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .action-btns {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 8px;
+        }
+
+        .action-btn {
+          padding: 11px 8px;
+          background: linear-gradient(135deg, #FFFF00, #FF00FF);
+          border: none;
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 8px;
+          color: black;
+          font-weight: bold;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .action-btn:disabled {
+          opacity: 0.5;
+        }
+
+        .action-btn-x {
+          background: linear-gradient(135deg, #1DA1F2, #0077B5);
+          color: white;
+        }
+
+        .action-btn-tg {
+          background: linear-gradient(135deg, #0088cc, #229ED9);
+          color: white;
+        }
+
+        .referral-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          margin-bottom: 18px;
+        }
+
+        .ref-stat {
+          background: rgba(20, 20, 20, 0.8);
+          border: 2px solid #FF00FF;
+          border-radius: 10px;
+          padding: 14px 10px;
+          text-align: center;
+        }
+
+        .ref-stat-value {
+          font-size: 22px;
+          font-weight: bold;
+          color: #888;
+          margin-bottom: 7px;
+        }
+
+        .ref-stat-label {
+          font-size: 7px;
+          color: #666;
+        }
+
+        .referral-info-box {
+          background: rgba(0, 255, 0, 0.1);
+          border: 2px solid #00FF00;
+          border-radius: 10px;
+          padding: 14px;
+        }
+
+        .info-text {
+          font-size: 9px;
+          color: #00FF00;
+          line-height: 1.6;
+          text-align: center;
+        }
+
+        /* BOTTOM NAV - 5 tabs */
+        .bottom-nav {
+          height: 64px;
+          background: rgba(10, 10, 10, 0.95);
+          backdrop-filter: blur(10px);
+          border-top: 2px solid #FF00FF;
+          display: flex;
+          justify-content: space-around;
+          align-items: center;
+          flex-shrink: 0;
+          box-shadow: 0 -3px 15px rgba(255, 0, 255, 0.3);
+        }
+
+        .nav-btn {
+          flex: 1;
+          height: 100%;
+          background: transparent;
+          border: none;
+          color: #666;
+          font-family: inherit;
+          font-size: 8px;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          transition: all 0.3s;
+          position: relative;
+        }
+
+        .nav-btn::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: transparent;
+          transition: background 0.3s;
+        }
+
+        .nav-btn-active {
+          color: white;
+        }
+
+        .nav-btn-active::before {
+          background: linear-gradient(90deg, #FF00FF, #00FFFF, #00FF00);
+          box-shadow: 0 0 15px rgba(255, 0, 255, 0.8);
+        }
+
+        @media (max-width: 480px) {
+          .mobile-container {
+            max-width: 100%;
+          }
+        }
+
+        @media (orientation: landscape) and (max-height: 600px) {
+          .stats-simple {
+            gap: 6px;
+            margin-bottom: 8px;
+          }
+
+          .stat-box {
+            padding: 6px 4px;
+          }
+
+          .stat-emoji {
+            font-size: 18px;
+            margin-bottom: 4px;
+          }
+
+          .stat-label {
+            font-size: 5px;
+          }
+
+          .stat-value {
+            font-size: 13px;
+          }
+
+          .pyramid-grid {
+            grid-template-columns: repeat(9, 26px);
+            grid-template-rows: repeat(5, 38px);
+          }
+
+          .pyramid-moai {
+            font-size: 30px;
+          }
+
+          .level-badge {
+            margin-top: 8px;
+            padding: 6px 16px;
+            font-size: 10px;
+          }
+
+          .tap-hint {
+            margin-top: 6px;
+            font-size: 9px;
+          }
+
+          .energy-bar-container {
+            padding: 8px;
+            margin-bottom: 8px;
+          }
         }
       `}</style>
     </div>
   );
 };
 
-export default PyramidMemeEmpire;
+export default PyramidMemeEmpireV5;
