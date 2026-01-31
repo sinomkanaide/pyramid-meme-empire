@@ -6,6 +6,8 @@ import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from
 // Arena, Quests, Energy, Tooltips, TBA Rewards
 // ============================================================================
 
+const API_URL = 'https://pyramid-meme-empire-production.up.railway.app';
+
 const PyramidMemeEmpireV5 = () => {
   // ========== STATE ==========
   const [walletAddress, setWalletAddress] = useState(null);
