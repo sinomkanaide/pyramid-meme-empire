@@ -8,10 +8,27 @@ import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from
 
 const API_URL = 'https://pyramid-meme-empire-production.up.railway.app';
 
+// ========== API HELPERS ==========
+const getToken = () => localStorage.getItem('pme_token');
+const setToken = (token) => localStorage.setItem('pme_token', token);
+const clearToken = () => localStorage.removeItem('pme_token');
+
+const apiCall = async (endpoint, options = {}) => {
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'API error');
+  return data;
+};
+
 const PyramidMemeEmpireV5 = () => {
   // ========== STATE ==========
   const [walletAddress, setWalletAddress] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [bricks, setBricks] = useState(28);
   const [displayBricks, setDisplayBricks] = useState(28);
   const [level, setLevel] = useState(1);
@@ -121,10 +138,10 @@ const PyramidMemeEmpireV5 = () => {
     setIsConnecting(true);
     try {
       if (typeof window.ethereum !== 'undefined') {
-        const accounts = await window.ethereum.request({ 
-          method: 'eth_requestAccounts' 
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts'
         });
-        
+
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
@@ -144,10 +161,43 @@ const PyramidMemeEmpireV5 = () => {
             });
           }
         }
-        
-        setWalletAddress(accounts[0]);
-        playWhoosh();
-        showNotification('🎉 WELCOME!');
+
+        const wallet = accounts[0];
+        setWalletAddress(wallet);
+
+        // Authenticate with backend
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const refCode = urlParams.get('ref');
+
+          // Get nonce
+          const { message } = await apiCall(`/api/auth/nonce/${wallet}`);
+
+          // Sign message
+          const signature = await window.ethereum.request({
+            method: 'personal_sign',
+            params: [message, wallet],
+          });
+
+          // Verify and get token
+          const authData = await apiCall('/api/auth/verify', {
+            method: 'POST',
+            body: JSON.stringify({ walletAddress: wallet, signature, referralCode: refCode }),
+          });
+
+          setToken(authData.token);
+          setIsAuthenticated(true);
+
+          // Load progress from backend
+          await loadProgress();
+          await loadLeaderboard();
+
+          playWhoosh();
+          showNotification('🎉 WELCOME!');
+        } catch (authError) {
+          console.error('Auth error:', authError);
+          showNotification('⚠️ AUTH FAILED - DEMO MODE');
+        }
       } else {
         showNotification('⚠️ INSTALL METAMASK');
       }
@@ -157,49 +207,105 @@ const PyramidMemeEmpireV5 = () => {
     setIsConnecting(false);
   };
 
+  // Load progress from backend
+  const loadProgress = async () => {
+    try {
+      const data = await apiCall('/api/game/progress');
+      setBricks(data.bricks || 0);
+      setDisplayBricks(data.bricks || 0);
+      setLevel(data.level || 1);
+      setEnergy(data.energy || 100);
+      setIsPremium(data.isPremium || false);
+      setUserRank(data.rank || 0);
+    } catch (err) {
+      console.error('Load progress error:', err);
+    }
+  };
+
+  // Load leaderboard from backend
+  const loadLeaderboard = async () => {
+    try {
+      const data = await apiCall('/api/game/leaderboard?limit=10');
+      if (data.leaderboard && data.leaderboard.length > 0) {
+        setLeaderboard(data.leaderboard.map((p, i) => ({
+          rank: i + 1,
+          name: p.username || `${p.address.slice(0, 6)}...${p.address.slice(-4)}`,
+          taps: p.bricks,
+          winnings: `${p.level}L`,
+        })));
+      }
+    } catch (err) {
+      console.error('Load leaderboard error:', err);
+    }
+  };
+
   // ========== TAP MECHANICS ==========
-  const handleTap = (e) => {
+  const handleTap = async (e) => {
     const now = Date.now();
-    
+
     // Check cooldown for free users
     if (!isPremium && !hasBattlePass && (now - lastTapTime) < 2000) {
       showNotification('⏱️ COOLDOWN!');
       return;
     }
-    
+
     // Check energy for free users
     if (!isPremium && !hasBattlePass && energy <= 0) {
       showNotification('⚡ NO ENERGY! WAIT OR GO PREMIUM');
       return;
     }
-    
-    // Add brick
-    setBricks(prev => prev + 1);
-    
+
+    // Send tap to backend if authenticated
+    if (isAuthenticated) {
+      try {
+        const result = await apiCall('/api/game/tap', { method: 'POST' });
+        setBricks(result.bricks);
+        setLevel(result.level);
+        setEnergy(result.energy);
+
+        if (result.leveledUp) {
+          triggerLevelUp();
+        }
+      } catch (err) {
+        if (err.message?.includes('cooldown') || err.message?.includes('Wait')) {
+          showNotification('⏱️ COOLDOWN!');
+          return;
+        } else if (err.message?.includes('energy')) {
+          showNotification('⚡ NO ENERGY!');
+          return;
+        }
+        // Fallback to local if API fails
+        console.error('Tap API error:', err);
+      }
+    } else {
+      // Local mode (not authenticated)
+      setBricks(prev => prev + 1);
+      if (!isPremium && !hasBattlePass) {
+        setEnergy(prev => Math.max(0, prev - 1));
+      }
+      const newLevel = Math.floor(bricks / 100) + 1;
+      if (newLevel > level) {
+        setLevel(newLevel);
+        triggerLevelUp();
+      }
+    }
+
     // Add $PME (TBA - hidden amount)
-    const pmeGain = Math.floor(Math.random() * 3) + 1; // 1-3 PME per tap (hidden from user)
+    const pmeGain = Math.floor(Math.random() * 3) + 1;
     setSpme(prev => prev + pmeGain);
-    
-    // Energy management (only for free users)
-    if (!isPremium && !hasBattlePass) {
-      setEnergy(prev => Math.max(0, prev - 1));
+
+    // Energy management for local mode
+    if (!isAuthenticated && !isPremium && !hasBattlePass) {
       setLastTapTime(now);
     }
-    
-    // Pyramid pulse
+
+    // Visual effects
     setPyramidPulse(true);
     setTimeout(() => setPyramidPulse(false), 300);
-    
+
     playCoinSound();
     createParticles(e.clientX, e.clientY);
-    
-    // Level up check
-    const newLevel = Math.floor(bricks / 100) + 1;
-    if (newLevel > level) {
-      setLevel(newLevel);
-      triggerLevelUp();
-    }
-    
+
     // Update quest progress
     if (bricks + 1 >= 100) {
       updateQuest(5, true); // Stack 100 Bricks quest
