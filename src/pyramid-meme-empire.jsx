@@ -137,18 +137,43 @@ const PyramidMemeEmpireV5 = () => {
   const connectWallet = async () => {
     setIsConnecting(true);
     try {
-      if (typeof window.ethereum !== 'undefined') {
-        const accounts = await window.ethereum.request({
-          method: 'eth_requestAccounts'
-        });
+      if (typeof window.ethereum === 'undefined') {
+        showNotification('⚠️ INSTALL METAMASK');
+        return;
+      }
 
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x2105' }],
-          });
-        } catch (switchError) {
-          if (switchError.code === 4902) {
+      // Request accounts with timeout
+      let accounts;
+      try {
+        accounts = await Promise.race([
+          window.ethereum.request({ method: 'eth_requestAccounts' }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), 30000)
+          )
+        ]);
+      } catch (err) {
+        if (err.message === 'TIMEOUT') {
+          showNotification('⏱️ METAMASK TIMEOUT - REFRESH PAGE');
+        } else if (err.code === 4001) {
+          showNotification('❌ CONNECTION REJECTED');
+        } else if (err.message?.includes('service worker')) {
+          showNotification('🔧 METAMASK ERROR - RESTART BROWSER');
+        } else {
+          showNotification('❌ WALLET ERROR - TRY AGAIN');
+        }
+        console.error('Wallet connect error:', err);
+        return;
+      }
+
+      // Switch to Base network
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x2105' }],
+        });
+      } catch (switchError) {
+        if (switchError.code === 4902) {
+          try {
             await window.ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [{
@@ -159,52 +184,84 @@ const PyramidMemeEmpireV5 = () => {
                 blockExplorerUrls: ['https://basescan.org']
               }]
             });
+          } catch (addError) {
+            showNotification('❌ FAILED TO ADD BASE NETWORK');
+            console.error('Add chain error:', addError);
+            return;
           }
+        } else if (switchError.code === 4001) {
+          showNotification('❌ NETWORK SWITCH REJECTED');
+          return;
+        }
+      }
+
+      const wallet = accounts[0];
+      setWalletAddress(wallet);
+
+      // Authenticate with backend
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const refCode = urlParams.get('ref');
+
+        // Get nonce
+        const { message } = await apiCall(`/api/auth/nonce/${wallet}`);
+
+        // Sign message with timeout
+        let signature;
+        try {
+          signature = await Promise.race([
+            window.ethereum.request({
+              method: 'personal_sign',
+              params: [message, wallet],
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('SIGN_TIMEOUT')), 60000)
+            )
+          ]);
+        } catch (signError) {
+          if (signError.message === 'SIGN_TIMEOUT') {
+            showNotification('⏱️ SIGN TIMEOUT - TRY AGAIN');
+          } else if (signError.code === 4001) {
+            showNotification('❌ SIGNATURE REJECTED');
+          } else if (signError.message?.includes('service worker')) {
+            showNotification('🔧 METAMASK ERROR - RESTART BROWSER');
+          } else {
+            showNotification('❌ SIGN FAILED - TRY AGAIN');
+          }
+          console.error('Sign error:', signError);
+          setWalletAddress(null);
+          return;
         }
 
-        const wallet = accounts[0];
-        setWalletAddress(wallet);
+        // Verify and get token
+        const authData = await apiCall('/api/auth/verify', {
+          method: 'POST',
+          body: JSON.stringify({ walletAddress: wallet, signature, referralCode: refCode }),
+        });
 
-        // Authenticate with backend
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          const refCode = urlParams.get('ref');
+        setToken(authData.token);
+        setIsAuthenticated(true);
 
-          // Get nonce
-          const { message } = await apiCall(`/api/auth/nonce/${wallet}`);
+        // Load progress from backend
+        await loadProgress();
+        await loadLeaderboard();
 
-          // Sign message
-          const signature = await window.ethereum.request({
-            method: 'personal_sign',
-            params: [message, wallet],
-          });
-
-          // Verify and get token
-          const authData = await apiCall('/api/auth/verify', {
-            method: 'POST',
-            body: JSON.stringify({ walletAddress: wallet, signature, referralCode: refCode }),
-          });
-
-          setToken(authData.token);
-          setIsAuthenticated(true);
-
-          // Load progress from backend
-          await loadProgress();
-          await loadLeaderboard();
-
-          playWhoosh();
-          showNotification('🎉 WELCOME!');
-        } catch (authError) {
-          console.error('Auth error:', authError);
+        playWhoosh();
+        showNotification('🎉 WELCOME!');
+      } catch (authError) {
+        console.error('Auth error:', authError);
+        if (authError.message?.includes('fetch')) {
+          showNotification('🌐 NETWORK ERROR - CHECK CONNECTION');
+        } else {
           showNotification('⚠️ AUTH FAILED - DEMO MODE');
         }
-      } else {
-        showNotification('⚠️ INSTALL METAMASK');
       }
     } catch (error) {
-      showNotification('❌ FAILED');
+      console.error('Unexpected error:', error);
+      showNotification('❌ UNEXPECTED ERROR - REFRESH PAGE');
+    } finally {
+      setIsConnecting(false);
     }
-    setIsConnecting(false);
   };
 
   // Load progress from backend
