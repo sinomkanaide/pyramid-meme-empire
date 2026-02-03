@@ -38,14 +38,15 @@ router.get('/nonce/:walletAddress', (req, res) => {
 router.post('/verify',
   body('walletAddress').isEthereumAddress(),
   body('signature').isString().isLength({ min: 130 }),
-  body('referralCode').optional({ values: 'null' }).isString().isLength({ min: 6, max: 20 }),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { walletAddress, signature, referralCode } = req.body;
+    const { walletAddress, signature } = req.body;
+    // Handle referralCode - can be null, undefined, or a string
+    const referralCode = req.body.referralCode || null;
 
     try {
       // Get stored nonce
