@@ -38,7 +38,7 @@ router.get('/nonce/:walletAddress', (req, res) => {
 router.post('/verify',
   body('walletAddress').isEthereumAddress(),
   body('signature').isString().isLength({ min: 130 }),
-  body('referralCode').optional().isString().isLength({ min: 6, max: 20 }),
+  body('referralCode').optional({ values: 'null' }).isString().isLength({ min: 6, max: 20 }),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
