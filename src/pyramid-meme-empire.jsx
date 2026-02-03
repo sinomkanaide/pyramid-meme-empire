@@ -1,5 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
+
+// ========== TOOLTIP COMPONENT (outside main component to prevent re-renders) ==========
+const Tooltip = memo(({ id, activeTooltip, setActiveTooltip, title, description, benefits }) => {
+  if (activeTooltip !== id) return null;
+
+  return (
+    <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)}>
+      <div className="tooltip-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="tooltip-close" onClick={() => setActiveTooltip(null)}>
+          <X size={20} />
+        </button>
+        <h3 className="tooltip-title">{title}</h3>
+        <p className="tooltip-desc">{description}</p>
+        {benefits && (
+          <div className="tooltip-benefits">
+            <h4 className="tooltip-benefits-title">Benefits:</h4>
+            {benefits.map((benefit, i) => (
+              <div key={i} className="tooltip-benefit-item">{benefit}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
 
 // ============================================================================
 // PYRAMID MEME EMPIRE V5 - COMPLETE SYSTEM
@@ -536,30 +561,10 @@ const PyramidMemeEmpireV5 = () => {
     playWhoosh();
   };
 
-  // ========== TOOLTIP ==========
-  const Tooltip = ({ id, title, description, benefits }) => {
-    if (activeTooltip !== id) return null;
-    
-    return (
-      <div className="tooltip-overlay" onClick={() => setActiveTooltip(null)}>
-        <div className="tooltip-modal" onClick={(e) => e.stopPropagation()}>
-          <button className="tooltip-close" onClick={() => setActiveTooltip(null)}>
-            <X size={20} />
-          </button>
-          <h3 className="tooltip-title">{title}</h3>
-          <p className="tooltip-desc">{description}</p>
-          {benefits && (
-            <div className="tooltip-benefits">
-              <h4 className="tooltip-benefits-title">Benefits:</h4>
-              {benefits.map((benefit, i) => (
-                <div key={i} className="tooltip-benefit-item">✓ {benefit}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  // ========== TOOLTIP HANDLER ==========
+  const handleTooltipToggle = useCallback((tooltipId) => {
+    setActiveTooltip(prev => prev === tooltipId ? null : tooltipId);
+  }, []);
 
   // ========== PYRAMID ==========
   const renderPyramid = () => {
@@ -651,9 +656,11 @@ const PyramidMemeEmpireV5 = () => {
         )}
 
         {/* Tooltips */}
-        <Tooltip 
+        <Tooltip
           id="premium"
-          title="👑 PREMIUM"
+          activeTooltip={activeTooltip}
+          setActiveTooltip={setActiveTooltip}
+          title="PREMIUM"
           description="Unlock unlimited potential with no restrictions."
           benefits={[
             'Unlimited energy - tap forever',
@@ -662,10 +669,12 @@ const PyramidMemeEmpireV5 = () => {
             'Permanent unlock',
           ]}
         />
-        
-        <Tooltip 
+
+        <Tooltip
           id="battlepass"
-          title="👑 BATTLE PASS"
+          activeTooltip={activeTooltip}
+          setActiveTooltip={setActiveTooltip}
+          title="BATTLE PASS"
           description="The ultimate PyramidMeme experience."
           benefits={[
             'ALL boosts included (X2, X5)',
@@ -675,10 +684,12 @@ const PyramidMemeEmpireV5 = () => {
             'Unlimited energy & no cooldown',
           ]}
         />
-        
-        <Tooltip 
+
+        <Tooltip
           id="boostx2"
-          title="⚡ BOOST X2"
+          activeTooltip={activeTooltip}
+          setActiveTooltip={setActiveTooltip}
+          title="BOOST X2"
           description="Double your brick gains for 24 hours."
           benefits={[
             '2X bricks per tap',
@@ -686,10 +697,12 @@ const PyramidMemeEmpireV5 = () => {
             'Stackable with other boosts',
           ]}
         />
-        
-        <Tooltip 
+
+        <Tooltip
           id="boostx5"
-          title="🔥 BOOST X5"
+          activeTooltip={activeTooltip}
+          setActiveTooltip={setActiveTooltip}
+          title="BOOST X5"
           description="Massive 5X multiplier for 24 hours."
           benefits={[
             '5X bricks per tap',
@@ -697,10 +710,12 @@ const PyramidMemeEmpireV5 = () => {
             'Best value for grinding',
           ]}
         />
-        
-        <Tooltip 
+
+        <Tooltip
           id="energy"
-          title="🔋 ENERGY REFILL"
+          activeTooltip={activeTooltip}
+          setActiveTooltip={setActiveTooltip}
+          title="ENERGY REFILL"
           description="Instantly restore your energy."
           benefits={[
             'Instant +100 energy',
@@ -912,9 +927,9 @@ const PyramidMemeEmpireV5 = () => {
                       <div className="item-title">BATTLE PASS</div>
                       <div className="item-subtitle">SEASON 1 - UNLIMITED POWER</div>
                     </div>
-                    <button 
+                    <button
                       className="info-btn"
-                      onClick={() => setActiveTooltip(activeTooltip === 'battlepass' ? null : 'battlepass')}
+                      onClick={() => handleTooltipToggle('battlepass')}
                     >
                       <Info size={18} />
                     </button>
@@ -938,9 +953,9 @@ const PyramidMemeEmpireV5 = () => {
                     </div>
                   </div>
                   <div className="item-right">
-                    <button 
+                    <button
                       className="info-btn-small"
-                      onClick={() => setActiveTooltip(activeTooltip === 'premium' ? null : 'premium')}
+                      onClick={() => handleTooltipToggle('premium')}
                     >
                       <Info size={16} />
                     </button>
@@ -959,9 +974,9 @@ const PyramidMemeEmpireV5 = () => {
                     </div>
                   </div>
                   <div className="item-right">
-                    <button 
+                    <button
                       className="info-btn-small"
-                      onClick={() => setActiveTooltip(activeTooltip === 'boostx2' ? null : 'boostx2')}
+                      onClick={() => handleTooltipToggle('boostx2')}
                     >
                       <Info size={16} />
                     </button>
@@ -980,9 +995,9 @@ const PyramidMemeEmpireV5 = () => {
                     </div>
                   </div>
                   <div className="item-right">
-                    <button 
+                    <button
                       className="info-btn-small"
-                      onClick={() => setActiveTooltip(activeTooltip === 'boostx5' ? null : 'boostx5')}
+                      onClick={() => handleTooltipToggle('boostx5')}
                     >
                       <Info size={16} />
                     </button>
@@ -1001,9 +1016,9 @@ const PyramidMemeEmpireV5 = () => {
                     </div>
                   </div>
                   <div className="item-right">
-                    <button 
+                    <button
                       className="info-btn-small"
-                      onClick={() => setActiveTooltip(activeTooltip === 'energy' ? null : 'energy')}
+                      onClick={() => handleTooltipToggle('energy')}
                     >
                       <Info size={16} />
                     </button>
