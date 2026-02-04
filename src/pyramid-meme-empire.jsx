@@ -1272,12 +1272,6 @@ const PyramidMemeEmpireV5 = () => {
           align-items: center;
           justify-content: center;
           padding: 20px;
-          animation: fadeIn 0.2s ease-out;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
         }
 
         .tooltip-modal {
@@ -1290,12 +1284,7 @@ const PyramidMemeEmpireV5 = () => {
           overflow-y: auto;
           box-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
           position: relative;
-          animation: slideUp 0.3s ease-out;
-        }
-
-        @keyframes slideUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+          transform: scale(1);
         }
 
         .tooltip-close {
