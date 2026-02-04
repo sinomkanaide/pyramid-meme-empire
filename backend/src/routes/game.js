@@ -21,6 +21,12 @@ router.get('/progress', async (req, res) => {
     const FREE_USER_MAX_LEVEL = 3;
     const isLevelCapped = !req.user.isPremium && progress.level >= FREE_USER_MAX_LEVEL;
 
+    // Check if boost is active
+    const now = new Date();
+    const boostExpiresAt = progress.boost_expires_at ? new Date(progress.boost_expires_at) : null;
+    const isBoostActive = boostExpiresAt && boostExpiresAt > now;
+    const activeMultiplier = isBoostActive ? parseFloat(progress.boost_multiplier) : 1;
+
     res.json({
       bricks: progress.bricks,
       level: progress.level,
@@ -28,8 +34,10 @@ router.get('/progress', async (req, res) => {
       energy: progress.energy,
       maxEnergy: progress.max_energy || 100,
       totalTaps: progress.total_taps,
-      boostMultiplier: parseFloat(progress.boost_multiplier),
-      boostExpiresAt: progress.boost_expires_at,
+      boostMultiplier: activeMultiplier,
+      boostExpiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
+      boostType: isBoostActive ? progress.boost_type : null,
+      isBoostActive,
       rank,
       isPremium: req.user.isPremium,
       isLevelCapped,
@@ -54,6 +62,11 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       ipAddress
     );
 
+    // Check if boost is still active
+    const now = new Date();
+    const boostExpiresAt = result.boost_expires_at ? new Date(result.boost_expires_at) : null;
+    const isBoostActive = boostExpiresAt && boostExpiresAt > now;
+
     res.json({
       success: true,
       bricks: result.bricks,
@@ -65,7 +78,11 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       totalTaps: result.total_taps,
       isLevelCapped: result.isLevelCapped,
       maxFreeLevel: result.maxFreeLevel,
-      isPremium: req.user.isPremium
+      isPremium: req.user.isPremium,
+      boostMultiplier: isBoostActive ? parseFloat(result.boost_multiplier) : 1,
+      boostExpiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
+      boostType: isBoostActive ? result.boost_type : null,
+      isBoostActive
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {

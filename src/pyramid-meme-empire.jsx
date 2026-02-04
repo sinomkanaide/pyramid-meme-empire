@@ -81,6 +81,16 @@ const PyramidMemeEmpireV5 = () => {
   const [isLevelCapped, setIsLevelCapped] = useState(false);
   const MAX_FREE_LEVEL = 3;
 
+  // Boost system
+  const [boostMultiplier, setBoostMultiplier] = useState(1);
+  const [boostExpiresAt, setBoostExpiresAt] = useState(null);
+  const [boostType, setBoostType] = useState(null);
+  const [isBoostActive, setIsBoostActive] = useState(false);
+  const [boostTimeRemaining, setBoostTimeRemaining] = useState(0);
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [selectedBoost, setSelectedBoost] = useState(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
     { rank: 1, name: 'CryptoKing', taps: 8934, winnings: '23W' },
@@ -309,6 +319,12 @@ const PyramidMemeEmpireV5 = () => {
       setIsPremium(data.isPremium || false);
       setUserRank(data.rank || 0);
       setIsLevelCapped(data.isLevelCapped || false);
+
+      // Load boost info
+      setBoostMultiplier(data.boostMultiplier || 1);
+      setBoostExpiresAt(data.boostExpiresAt || null);
+      setBoostType(data.boostType || null);
+      setIsBoostActive(data.isBoostActive || false);
     } catch (err) {
       console.error('Load progress error:', err);
     }
@@ -355,6 +371,12 @@ const PyramidMemeEmpireV5 = () => {
         setLevel(result.level);
         setEnergy(result.energy);
         setIsPremium(result.isPremium);
+
+        // Update boost state
+        setBoostMultiplier(result.boostMultiplier || 1);
+        setIsBoostActive(result.isBoostActive || false);
+        setBoostExpiresAt(result.boostExpiresAt || null);
+        setBoostType(result.boostType || null);
 
         if (result.leveledUp) {
           triggerLevelUp();
@@ -530,6 +552,43 @@ const PyramidMemeEmpireV5 = () => {
     return () => clearInterval(interval);
   }, [isPremium, hasBattlePass, maxEnergy, activeTooltip]);
 
+  // ========== BOOST COUNTDOWN ==========
+  useEffect(() => {
+    if (!boostExpiresAt || !isBoostActive) {
+      setBoostTimeRemaining(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const expires = new Date(boostExpiresAt);
+      const remaining = Math.max(0, Math.floor((expires - now) / 1000));
+
+      if (remaining <= 0) {
+        setIsBoostActive(false);
+        setBoostMultiplier(1);
+        setBoostType(null);
+        setBoostExpiresAt(null);
+        setBoostTimeRemaining(0);
+        showNotification('⚡ Boost expired!');
+      } else {
+        setBoostTimeRemaining(remaining);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [boostExpiresAt, isBoostActive]);
+
+  // Format boost time remaining
+  const formatBoostTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // ========== NOTIFICATION ==========
   const showNotification = (message) => {
     setNotification(message);
@@ -543,7 +602,7 @@ const PyramidMemeEmpireV5 = () => {
 
   const handleQuestClick = (quest) => {
     if (quest.completed) return;
-    
+
     // Open external links for social quests
     if (quest.type === 'social') {
       if (quest.title.includes('Follow on X')) {
@@ -555,13 +614,57 @@ const PyramidMemeEmpireV5 = () => {
       } else if (quest.title.includes('Telegram')) {
         window.open('https://t.me/pyramidmeme', '_blank');
       }
-      
+
       // Mark as completed after 2 seconds (simulated - real app would verify via API)
       setTimeout(() => {
         updateQuest(quest.id, true);
         showNotification(`🎉 +${Math.floor(Math.random() * 50) + 10} $PME!`);
       }, 2000);
     }
+  };
+
+  // ========== BOOST PURCHASE ==========
+  const handleBoostPurchase = async (boostId) => {
+    if (!isAuthenticated) {
+      showNotification('⚠️ Connect wallet first!');
+      return;
+    }
+
+    if (isBoostActive) {
+      showNotification('⚡ A boost is already active!');
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const result = await apiCall('/api/shop/activate', {
+        method: 'POST',
+        body: JSON.stringify({ itemId: boostId })
+      });
+
+      if (result.success && result.boost) {
+        setBoostMultiplier(result.boost.multiplier);
+        setBoostExpiresAt(result.boost.expiresAt);
+        setBoostType(result.boost.type);
+        setIsBoostActive(true);
+        setShowBoostModal(false);
+        showNotification(`🔥 ${result.boost.multiplier}X BOOST ACTIVATED!`);
+        playWhoosh();
+      } else {
+        showNotification(result.message || '✅ Activated!');
+        setShowBoostModal(false);
+      }
+    } catch (err) {
+      console.error('Purchase error:', err);
+      showNotification('❌ Purchase failed');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  const openBoostModal = (boostId) => {
+    setSelectedBoost(boostId);
+    setShowBoostModal(true);
   };
 
   // ========== SHARE ==========
@@ -899,6 +1002,151 @@ const PyramidMemeEmpireV5 = () => {
           </div>
         )}
 
+        {/* Boost Purchase Confirmation Modal */}
+        {showBoostModal && selectedBoost && (
+          <div
+            className="boost-modal-backdrop"
+            onMouseDown={() => !isPurchasing && setShowBoostModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.95)',
+              zIndex: 10001,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: selectedBoost === 'boost_5x'
+                  ? 'linear-gradient(135deg, #1a1a2e, #3d1f1f)'
+                  : 'linear-gradient(135deg, #1a1a2e, #3d2f1f)',
+                border: `3px solid ${selectedBoost === 'boost_5x' ? '#FF3333' : '#FFA500'}`,
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 340,
+                width: '100%',
+                position: 'relative',
+                boxShadow: `0 0 50px ${selectedBoost === 'boost_5x' ? 'rgba(255,50,50,0.4)' : 'rgba(255,165,0,0.4)'}`,
+                textAlign: 'center',
+              }}>
+              {!isPurchasing && (
+                <button
+                  onMouseDown={() => setShowBoostModal(false)}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    borderRadius: '50%',
+                    width: 32,
+                    height: 32,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: 16,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+
+              <div style={{ fontSize: 48, marginBottom: 16 }}>
+                {selectedBoost === 'boost_5x' ? '🔥' : '⚡'}
+              </div>
+
+              <h3 style={{
+                color: selectedBoost === 'boost_5x' ? '#FF3333' : '#FFA500',
+                fontSize: 18,
+                marginBottom: 8,
+                fontFamily: 'inherit',
+                textShadow: `0 0 10px ${selectedBoost === 'boost_5x' ? 'rgba(255,50,50,0.5)' : 'rgba(255,165,0,0.5)'}`,
+              }}>
+                BOOST {selectedBoost === 'boost_5x' ? 'X5' : 'X2'}
+              </h3>
+
+              <p style={{
+                color: '#aaa',
+                fontSize: 11,
+                marginBottom: 20,
+                lineHeight: 1.6,
+                fontFamily: 'inherit',
+              }}>
+                {selectedBoost === 'boost_5x'
+                  ? 'Multiply your bricks by 5X for 24 hours!'
+                  : 'Double your bricks for 24 hours!'}
+              </p>
+
+              <div style={{
+                background: 'rgba(0,255,0,0.1)',
+                border: '2px solid rgba(0,255,0,0.3)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+              }}>
+                <div style={{ color: '#0f0', fontSize: 9, marginBottom: 8, fontFamily: 'inherit' }}>
+                  {selectedBoost === 'boost_5x' ? '+5 bricks per tap' : '+2 bricks per tap'}
+                </div>
+                <div style={{ color: '#888', fontSize: 8, fontFamily: 'inherit' }}>
+                  Duration: 24 hours
+                </div>
+              </div>
+
+              <div style={{
+                fontSize: 28,
+                color: '#0f0',
+                marginBottom: 16,
+                textShadow: '0 0 15px rgba(0,255,0,0.5)',
+              }}>
+                ${selectedBoost === 'boost_5x' ? '1.50' : '0.50'}
+              </div>
+
+              <button
+                onClick={() => handleBoostPurchase(selectedBoost)}
+                disabled={isPurchasing}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  background: isPurchasing
+                    ? '#666'
+                    : selectedBoost === 'boost_5x'
+                      ? 'linear-gradient(135deg, #FF3333, #FF6600)'
+                      : 'linear-gradient(135deg, #FFA500, #FFD700)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  color: isPurchasing ? '#999' : '#000',
+                  fontWeight: 'bold',
+                  cursor: isPurchasing ? 'not-allowed' : 'pointer',
+                  boxShadow: isPurchasing ? 'none' : `0 0 30px ${selectedBoost === 'boost_5x' ? 'rgba(255,50,50,0.5)' : 'rgba(255,165,0,0.5)'}`,
+                }}
+              >
+                {isPurchasing ? 'ACTIVATING...' : 'ACTIVATE BOOST (DEMO)'}
+              </button>
+
+              <div style={{
+                marginTop: 12,
+                fontSize: 8,
+                color: '#666',
+                fontFamily: 'inherit',
+              }}>
+                Demo mode • No real payment required
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <header className="header">
           <div className="logo">PYRAMIDMEME</div>
@@ -947,6 +1195,17 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
               </div>
 
+              {/* Active Boost Indicator */}
+              {isBoostActive && (
+                <div className={`boost-indicator ${boostType === 'x5' ? 'boost-x5' : 'boost-x2'}`}>
+                  <div className="boost-info">
+                    <span className="boost-icon">{boostType === 'x5' ? '🔥' : '⚡'}</span>
+                    <span className="boost-label">BOOST {boostType?.toUpperCase()} ACTIVE</span>
+                  </div>
+                  <div className="boost-timer">{formatBoostTime(boostTimeRemaining)}</div>
+                </div>
+              )}
+
               {/* Energy Bar (only show for free users) */}
               {!isPremium && !hasBattlePass && (
                 <div className="energy-bar-container">
@@ -958,8 +1217,8 @@ const PyramidMemeEmpireV5 = () => {
                     <div className="energy-value">{energy}/{maxEnergy}</div>
                   </div>
                   <div className="energy-bar">
-                    <div 
-                      className="energy-fill" 
+                    <div
+                      className="energy-fill"
                       style={{ width: `${(energy / maxEnergy) * 100}%` }}
                     />
                   </div>
@@ -1151,12 +1410,14 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 {/* Boost X2 */}
-                <div className="shop-item-row">
+                <div className={`shop-item-row ${isBoostActive ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">⚡</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X2</div>
-                      <div className="item-brief">2X bricks for 24h</div>
+                      <div className="item-brief">
+                        {isBoostActive ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '2X bricks for 24h'}
+                      </div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -1168,17 +1429,25 @@ const PyramidMemeEmpireV5 = () => {
                       <Info size={16} />
                     </button>
                     <div className="item-price-small">$0.50</div>
-                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                    <button
+                      className={`buy-btn-small ${isBoostActive ? 'btn-disabled' : ''}`}
+                      onClick={() => !isBoostActive && openBoostModal('boost_2x')}
+                      disabled={isBoostActive}
+                    >
+                      {isBoostActive && boostType === 'x2' ? 'ACTIVE' : 'BUY'}
+                    </button>
                   </div>
                 </div>
 
                 {/* Boost X5 */}
-                <div className="shop-item-row">
+                <div className={`shop-item-row ${isBoostActive ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">🔥</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X5</div>
-                      <div className="item-brief">5X bricks for 24h</div>
+                      <div className="item-brief">
+                        {isBoostActive ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '5X bricks for 24h'}
+                      </div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -1190,7 +1459,13 @@ const PyramidMemeEmpireV5 = () => {
                       <Info size={16} />
                     </button>
                     <div className="item-price-small">$1.50</div>
-                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                    <button
+                      className={`buy-btn-small ${isBoostActive ? 'btn-disabled' : ''}`}
+                      onClick={() => !isBoostActive && openBoostModal('boost_5x')}
+                      disabled={isBoostActive}
+                    >
+                      {isBoostActive && boostType === 'x5' ? 'ACTIVE' : 'BUY'}
+                    </button>
                   </div>
                 </div>
 
@@ -1653,6 +1928,65 @@ const PyramidMemeEmpireV5 = () => {
         .neon-cyan {
           color: #00FFFF;
           text-shadow: 0 0 10px #00FFFF;
+        }
+
+        /* BOOST INDICATOR */
+        .boost-indicator {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 16px;
+          border-radius: 12px;
+          margin-bottom: 12px;
+          flex-shrink: 0;
+          animation: boost-pulse 2s ease-in-out infinite;
+        }
+
+        .boost-x2 {
+          background: linear-gradient(135deg, rgba(255, 165, 0, 0.3), rgba(255, 100, 0, 0.3));
+          border: 2px solid #FFA500;
+          box-shadow: 0 0 20px rgba(255, 165, 0, 0.4);
+        }
+
+        .boost-x5 {
+          background: linear-gradient(135deg, rgba(255, 50, 50, 0.3), rgba(255, 0, 100, 0.3));
+          border: 2px solid #FF3333;
+          box-shadow: 0 0 20px rgba(255, 50, 50, 0.4);
+        }
+
+        @keyframes boost-pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.02); }
+        }
+
+        .boost-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .boost-icon {
+          font-size: 20px;
+        }
+
+        .boost-label {
+          font-size: 10px;
+          font-weight: bold;
+          color: #fff;
+          text-shadow: 0 0 10px currentColor;
+        }
+
+        .boost-x2 .boost-label { color: #FFA500; }
+        .boost-x5 .boost-label { color: #FF3333; }
+
+        .boost-timer {
+          font-size: 14px;
+          font-weight: bold;
+          color: #fff;
+          font-family: monospace;
+          background: rgba(0, 0, 0, 0.4);
+          padding: 4px 10px;
+          border-radius: 8px;
         }
 
         /* ENERGY BAR */
@@ -2271,6 +2605,18 @@ const PyramidMemeEmpireV5 = () => {
 
         .buy-btn-small:active {
           transform: scale(0.95);
+        }
+
+        .buy-btn-small.btn-disabled,
+        .buy-btn-small:disabled {
+          background: #444;
+          color: #888;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        .shop-item-row.item-disabled {
+          opacity: 0.7;
         }
 
         /* REFERRALS VIEW */

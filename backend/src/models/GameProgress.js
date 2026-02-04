@@ -110,14 +110,18 @@ class GameProgress {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + durationHours);
 
+    // Determine boost type based on multiplier
+    const boostType = multiplier === 2 ? 'x2' : multiplier === 5 ? 'x5' : `x${multiplier}`;
+
     const result = await db.query(
       `UPDATE game_progress
        SET boost_multiplier = $1,
            boost_expires_at = $2,
+           boost_type = $3,
            updated_at = NOW()
-       WHERE user_id = $3
+       WHERE user_id = $4
        RETURNING *`,
-      [multiplier, expiresAt, userId]
+      [multiplier, expiresAt, boostType, userId]
     );
     return result.rows[0];
   }

@@ -146,6 +146,111 @@ router.post('/purchase',
   }
 );
 
+// POST /shop/activate - Demo mode: Activate item without payment verification
+// This is for testing. In production, use /purchase with real tx verification
+router.post('/activate',
+  body('itemId').isString().isIn(Object.keys(SHOP_ITEMS)),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { itemId } = req.body;
+    const item = SHOP_ITEMS[itemId];
+
+    try {
+      // Generate a demo transaction hash
+      const demoTxHash = `0xdemo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`.padEnd(66, '0');
+
+      // Create transaction record with 'demo' status
+      await Transaction.create(
+        req.user.id,
+        demoTxHash,
+        'demo_purchase',
+        item.price,
+        itemId
+      );
+
+      let result = {};
+      let boostInfo = null;
+
+      switch (item.type) {
+        case 'subscription':
+          await User.setPremium(req.user.id, item.duration);
+          result = {
+            message: 'Premium activated!',
+            duration: item.duration,
+            type: 'premium'
+          };
+          break;
+
+        case 'boost':
+          const boostResult = await GameProgress.applyBoost(req.user.id, item.multiplier, item.duration);
+          boostInfo = {
+            multiplier: item.multiplier,
+            expiresAt: boostResult.boost_expires_at,
+            type: item.id
+          };
+          result = {
+            message: `${item.multiplier}X boost activated for 24 hours!`,
+            boost: boostInfo
+          };
+          break;
+
+        case 'consumable':
+          if (itemId === 'energy_refill') {
+            await GameProgress.regenerateEnergy(req.user.id, 100);
+            result = { message: 'Energy refilled to 100!', type: 'energy' };
+          }
+          break;
+      }
+
+      // Update transaction as confirmed
+      await Transaction.updateStatus(demoTxHash, 'confirmed');
+
+      res.json({
+        success: true,
+        item: {
+          id: item.id,
+          name: item.name,
+          price: item.price
+        },
+        ...result
+      });
+    } catch (error) {
+      console.error('Activate error:', error);
+      res.status(500).json({ error: 'Failed to activate item' });
+    }
+  }
+);
+
+// GET /shop/boost-status - Get current boost status
+router.get('/boost-status', async (req, res) => {
+  try {
+    const progress = await GameProgress.findByUserId(req.user.id);
+
+    if (!progress) {
+      return res.status(404).json({ error: 'Progress not found' });
+    }
+
+    const now = new Date();
+    const boostExpiresAt = progress.boost_expires_at ? new Date(progress.boost_expires_at) : null;
+    const isBoostActive = boostExpiresAt && boostExpiresAt > now;
+
+    res.json({
+      isActive: isBoostActive,
+      multiplier: isBoostActive ? parseFloat(progress.boost_multiplier) : 1,
+      expiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
+      remainingSeconds: isBoostActive ? Math.floor((boostExpiresAt - now) / 1000) : 0,
+      boostType: progress.boost_type
+    });
+  } catch (error) {
+    console.error('Boost status error:', error);
+    res.status(500).json({ error: 'Failed to get boost status' });
+  }
+});
+
 // GET /shop/transactions - Get user's transaction history
 router.get('/transactions', async (req, res) => {
   try {
