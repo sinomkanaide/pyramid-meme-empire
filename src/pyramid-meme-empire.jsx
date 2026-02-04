@@ -116,13 +116,10 @@ const PyramidMemeEmpireV5 = () => {
   const [userRank, setUserRank] = useState(47); // User's current rank
   
   // Quests system
-  const [quests, setQuests] = useState([
-    { id: 1, title: 'Follow on X', description: 'Follow @PyramidMeme on X', reward: 'TBA', completed: false, type: 'social', icon: '🐦' },
-    { id: 2, title: 'Like Latest Post', description: 'Like our pinned post on X', reward: 'TBA', completed: false, type: 'social', icon: '❤️' },
-    { id: 3, title: 'Retweet', description: 'RT our announcement', reward: 'TBA', completed: false, type: 'social', icon: '🔄' },
-    { id: 4, title: 'Join Telegram', description: 'Join our community', reward: 'TBA', completed: true, type: 'social', icon: '💬' },
-    { id: 5, title: 'Stack 100 Bricks', description: 'Tap 100 times', reward: 'TBA', completed: false, type: 'game', icon: '🧱' },
-  ]);
+  const [quests, setQuests] = useState([]);
+  const [questsLoading, setQuestsLoading] = useState(false);
+  const [totalQuestXP, setTotalQuestXP] = useState(0);
+  const [completingQuest, setCompletingQuest] = useState(null);
   
   const coinSounds = useRef([]);
   const levelUpSound = useRef(null);
@@ -714,31 +711,99 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   // ========== QUESTS ==========
-  const updateQuest = (questId, completed) => {
-    setQuests(prev => prev.map(q => q.id === questId ? { ...q, completed } : q));
+  // Load quests from API
+  const loadQuests = async () => {
+    if (!isAuthenticated) return;
+
+    setQuestsLoading(true);
+    try {
+      const data = await apiCall('/api/quests');
+      setQuests(data.quests || []);
+      setTotalQuestXP(data.totalQuestXP || 0);
+    } catch (err) {
+      console.error('Load quests error:', err);
+      // Keep empty quests on error
+    } finally {
+      setQuestsLoading(false);
+    }
   };
 
-  const handleQuestClick = (quest) => {
-    if (quest.completed) return;
-
-    // Open external links for social quests
-    if (quest.type === 'social') {
-      if (quest.title.includes('Follow on X')) {
-        window.open('https://x.com/pyramidmeme', '_blank');
-      } else if (quest.title.includes('Like')) {
-        window.open('https://x.com/pyramidmeme', '_blank');
-      } else if (quest.title.includes('Retweet')) {
-        window.open('https://x.com/pyramidmeme', '_blank');
-      } else if (quest.title.includes('Telegram')) {
-        window.open('https://t.me/pyramidmeme', '_blank');
-      }
-
-      // Mark as completed after 2 seconds (simulated - real app would verify via API)
-      setTimeout(() => {
-        updateQuest(quest.id, true);
-        showNotification(`🎉 +${Math.floor(Math.random() * 50) + 10} $PME!`);
-      }, 2000);
+  // Load quests when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadQuests();
     }
+  }, [isAuthenticated]);
+
+  // Complete a quest
+  const completeQuest = async (questId) => {
+    if (!isAuthenticated) {
+      showNotification('⚠️ Connect wallet first!');
+      return;
+    }
+
+    setCompletingQuest(questId);
+    try {
+      const result = await apiCall('/api/quests/complete', {
+        method: 'POST',
+        body: JSON.stringify({ questId })
+      });
+
+      if (result.success) {
+        // Update local state
+        setQuests(prev => prev.map(q =>
+          q.quest_id === questId ? { ...q, isCompleted: true } : q
+        ));
+        setTotalQuestXP(result.totalQuestXP);
+        showNotification(`🎉 +${result.xpEarned} XP!`);
+        playWhoosh();
+
+        // Reload quests to get fresh data
+        await loadQuests();
+      }
+    } catch (err) {
+      console.error('Complete quest error:', err);
+      if (err.message?.includes('already')) {
+        showNotification('✅ Already completed!');
+      } else if (err.message?.includes('Requirements')) {
+        showNotification('❌ Requirements not met!');
+      } else {
+        showNotification('❌ Failed to complete quest');
+      }
+    } finally {
+      setCompletingQuest(null);
+    }
+  };
+
+  // Handle quest click - open external URL or complete
+  const handleQuestClick = async (quest) => {
+    if (quest.isCompleted) return;
+
+    // For social/partner quests, open URL first
+    if (quest.external_url && (quest.type === 'social' || quest.type === 'partner_api')) {
+      window.open(quest.external_url, '_blank');
+    }
+
+    // For milestone/referral quests, check if completable
+    if (quest.verification_method === 'internal') {
+      if (!quest.canComplete) {
+        showNotification(`📊 ${quest.progressText}`);
+        return;
+      }
+    }
+  };
+
+  // Verify and complete a quest (called by VERIFY button)
+  const verifyQuest = async (quest) => {
+    if (quest.isCompleted) return;
+
+    // For internal verification, check requirements first
+    if (quest.verification_method === 'internal' && !quest.canComplete) {
+      showNotification(`📊 Progress: ${quest.progressText}`);
+      return;
+    }
+
+    await completeQuest(quest.quest_id);
   };
 
   // ========== BOOST PURCHASE ==========
@@ -2077,38 +2142,97 @@ const PyramidMemeEmpireV5 = () => {
           {currentTab === 'quests' && (
             <div className="quests-view">
               <div className="quests-scroll">
-                <h2 className="quests-title">🎯 DAILY QUESTS</h2>
-                <p className="quests-subtitle">Complete tasks to earn $PME rewards!</p>
-                
+                <h2 className="quests-title">🎯 QUESTS</h2>
+                <p className="quests-subtitle">Complete tasks to earn XP!</p>
+
+                {/* Total XP Banner */}
+                <div className="quest-xp-banner">
+                  <span className="xp-icon">⭐</span>
+                  <span className="xp-label">Total Quest XP:</span>
+                  <span className="xp-value">{totalQuestXP.toLocaleString()}</span>
+                </div>
+
+                {/* Loading state */}
+                {questsLoading && (
+                  <div className="quests-loading">Loading quests...</div>
+                )}
+
+                {/* Quests List */}
                 <div className="quests-list">
                   {quests.map((quest) => (
-                    <div 
-                      key={quest.id} 
-                      className={`quest-card ${quest.completed ? 'quest-completed' : ''}`}
-                      onClick={() => handleQuestClick(quest)}
+                    <div
+                      key={quest.quest_id}
+                      className={`quest-card ${quest.isCompleted ? 'quest-completed' : ''} ${!quest.canComplete && quest.verification_method === 'internal' ? 'quest-locked' : ''}`}
                     >
                       <div className="quest-icon">{quest.icon}</div>
                       <div className="quest-info">
-                        <h3 className="quest-title">{quest.title}</h3>
+                        <h3 className="quest-title-text">{quest.title}</h3>
                         <p className="quest-desc">{quest.description}</p>
+                        {/* Progress bar for milestone quests */}
+                        {quest.verification_method === 'internal' && !quest.isCompleted && quest.progressText && (
+                          <div className="quest-progress">
+                            <div className="quest-progress-bar">
+                              <div
+                                className="quest-progress-fill"
+                                style={{ width: `${Math.min(100, (quest.current / quest.required) * 100)}%` }}
+                              />
+                            </div>
+                            <span className="quest-progress-text">{quest.progressText}</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="quest-reward">
-                        {quest.completed ? (
+                      <div className="quest-reward-section">
+                        {quest.isCompleted ? (
                           <div className="quest-check">✓</div>
                         ) : (
-                          <div className="quest-reward-text">
-                            <div className="reward-amount">{quest.reward}</div>
-                            <div className="reward-label">$PME</div>
-                          </div>
+                          <>
+                            <div className="quest-reward-text">
+                              <div className="reward-amount">+{quest.xp_reward?.toLocaleString()}</div>
+                              <div className="reward-label">XP</div>
+                            </div>
+                            {/* Action button */}
+                            {quest.external_url && (quest.type === 'social' || quest.type === 'partner_api') ? (
+                              <div className="quest-actions">
+                                <button
+                                  className="quest-btn quest-btn-go"
+                                  onClick={() => window.open(quest.external_url, '_blank')}
+                                >
+                                  GO
+                                </button>
+                                <button
+                                  className={`quest-btn quest-btn-verify ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
+                                  onClick={() => verifyQuest(quest)}
+                                  disabled={completingQuest === quest.quest_id}
+                                >
+                                  {completingQuest === quest.quest_id ? '...' : 'VERIFY'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className={`quest-btn quest-btn-claim ${!quest.canComplete ? 'btn-disabled' : ''} ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
+                                onClick={() => verifyQuest(quest)}
+                                disabled={!quest.canComplete || completingQuest === quest.quest_id}
+                              >
+                                {completingQuest === quest.quest_id ? '...' : quest.canComplete ? 'CLAIM' : 'LOCKED'}
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
 
+                {/* Empty state */}
+                {!questsLoading && quests.length === 0 && (
+                  <div className="quests-empty">
+                    <p>Connect wallet to see quests</p>
+                  </div>
+                )}
+
                 <div className="quests-info">
-                  <p>🎁 Reward amounts are revealed upon completion</p>
-                  <p>🔄 Quests reset daily at 00:00 UTC</p>
+                  <p>🎁 Complete quests to earn XP and climb the leaderboard!</p>
+                  <p>✅ Social quests: Click GO, then VERIFY to claim</p>
                 </div>
               </div>
             </div>
@@ -3330,39 +3454,78 @@ const PyramidMemeEmpireV5 = () => {
           margin-bottom: 20px;
         }
 
-        .quest-card {
+        /* Quest XP Banner */
+        .quest-xp-banner {
           display: flex;
           align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 12px;
+          background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1));
+          border: 2px solid #FFD700;
+          border-radius: 12px;
+          margin-bottom: 16px;
+        }
+
+        .xp-icon {
+          font-size: 20px;
+        }
+
+        .xp-label {
+          font-size: 10px;
+          color: #888;
+        }
+
+        .xp-value {
+          font-size: 18px;
+          color: #FFD700;
+          font-weight: bold;
+        }
+
+        .quests-loading {
+          text-align: center;
+          padding: 20px;
+          color: #888;
+          font-size: 10px;
+        }
+
+        .quests-empty {
+          text-align: center;
+          padding: 30px;
+          color: #666;
+          font-size: 10px;
+        }
+
+        .quest-card {
+          display: flex;
+          align-items: flex-start;
           gap: 12px;
           padding: 14px;
           background: rgba(20, 20, 20, 0.8);
           border: 1.5px solid rgba(255, 0, 255, 0.3);
           border-radius: 12px;
           margin-bottom: 10px;
-          cursor: pointer;
           transition: all 0.3s;
         }
 
         .quest-card:hover {
           border-color: rgba(255, 0, 255, 0.6);
           box-shadow: 0 0 20px rgba(255, 0, 255, 0.2);
-          transform: translateY(-2px);
         }
 
         .quest-completed {
-          background: rgba(0, 255, 0, 0.05);
+          background: rgba(0, 255, 0, 0.08);
           border-color: rgba(0, 255, 0, 0.4);
-          opacity: 0.6;
-          cursor: default;
         }
 
-        .quest-completed:hover {
-          transform: none;
+        .quest-locked {
+          opacity: 0.7;
         }
 
         .quest-icon {
-          font-size: 32px;
+          font-size: 28px;
           flex-shrink: 0;
+          margin-top: 2px;
         }
 
         .quest-info {
@@ -3370,8 +3533,8 @@ const PyramidMemeEmpireV5 = () => {
           min-width: 0;
         }
 
-        .quest-title {
-          font-size: 11px;
+        .quest-title-text {
+          font-size: 10px;
           margin-bottom: 4px;
           color: #fff;
         }
@@ -3379,11 +3542,40 @@ const PyramidMemeEmpireV5 = () => {
         .quest-desc {
           font-size: 8px;
           color: #888;
+          margin-bottom: 6px;
         }
 
-        .quest-reward {
+        /* Quest Progress Bar */
+        .quest-progress {
+          margin-top: 8px;
+        }
+
+        .quest-progress-bar {
+          height: 6px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 3px;
+          overflow: hidden;
+          margin-bottom: 4px;
+        }
+
+        .quest-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #FF00FF, #00FFFF);
+          border-radius: 3px;
+          transition: width 0.3s ease;
+        }
+
+        .quest-progress-text {
+          font-size: 7px;
+          color: #00FFFF;
+        }
+
+        .quest-reward-section {
           flex-shrink: 0;
-          text-align: right;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 8px;
         }
 
         .quest-check {
@@ -3392,13 +3584,11 @@ const PyramidMemeEmpireV5 = () => {
         }
 
         .quest-reward-text {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
+          text-align: right;
         }
 
         .reward-amount {
-          font-size: 14px;
+          font-size: 12px;
           color: #FFFF00;
           font-weight: bold;
         }
@@ -3406,6 +3596,60 @@ const PyramidMemeEmpireV5 = () => {
         .reward-label {
           font-size: 7px;
           color: #888;
+        }
+
+        /* Quest Action Buttons */
+        .quest-actions {
+          display: flex;
+          gap: 6px;
+        }
+
+        .quest-btn {
+          padding: 6px 12px;
+          border: none;
+          border-radius: 6px;
+          font-family: inherit;
+          font-size: 8px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .quest-btn-go {
+          background: linear-gradient(135deg, #00FFFF, #0088FF);
+          color: #000;
+        }
+
+        .quest-btn-verify {
+          background: linear-gradient(135deg, #00FF00, #00CC00);
+          color: #000;
+        }
+
+        .quest-btn-claim {
+          background: linear-gradient(135deg, #FFFF00, #FF00FF);
+          color: #000;
+          padding: 8px 16px;
+        }
+
+        .quest-btn:hover {
+          transform: scale(1.05);
+          box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        .quest-btn.btn-disabled {
+          background: #444;
+          color: #888;
+          cursor: not-allowed;
+        }
+
+        .quest-btn.btn-disabled:hover {
+          transform: none;
+          box-shadow: none;
+        }
+
+        .quest-btn.btn-loading {
+          opacity: 0.7;
+          cursor: wait;
         }
 
         .quests-info {
@@ -3416,6 +3660,7 @@ const PyramidMemeEmpireV5 = () => {
           font-size: 9px;
           color: #00FFFF;
           line-height: 1.6;
+          margin-top: 16px;
         }
 
         .quests-info p {

@@ -7,6 +7,10 @@ const authRoutes = require('./routes/auth');
 const gameRoutes = require('./routes/game');
 const shopRoutes = require('./routes/shop');
 const referralsRoutes = require('./routes/referrals');
+const questsRoutes = require('./routes/quests');
+
+// Import Quest model for initialization
+const Quest = require('./models/Quest');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,6 +49,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/shop', shopRoutes);
 app.use('/api/referrals', referralsRoutes);
+app.use('/api/quests', questsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -60,9 +65,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
+// Initialize database tables and start server
+const startServer = async () => {
+  try {
+    // Initialize quest tables
+    await Quest.initializeTables();
+    console.log('Quest tables initialized');
+  } catch (error) {
+    console.error('Failed to initialize quest tables:', error);
+    // Continue anyway - tables might already exist
+  }
+
+  app.listen(PORT, () => {
+    console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
 ║   🗿 PYRAMID MEME EMPIRE BACKEND 🗿               ║
@@ -83,9 +98,15 @@ app.listen(PORT, () => {
 ║   - GET  /api/referrals/stats                     ║
 ║   - GET  /api/referrals/list                      ║
 ║   - GET  /api/referrals/code                      ║
+║   - GET  /api/quests                              ║
+║   - POST /api/quests/complete                     ║
+║   - GET  /api/quests/progress/:id                 ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   `);
-});
+  });
+};
+
+startServer();
 
 module.exports = app;
