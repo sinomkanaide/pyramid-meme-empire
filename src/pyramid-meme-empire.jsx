@@ -1,107 +1,34 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
 
-// ========== TOOLTIP COMPONENT (uses Portal to render outside main tree) ==========
-const TooltipPortal = memo(({ isOpen, onClose, title, description, benefits }) => {
-  if (!isOpen) return null;
-
-  const content = (
-    <div
-      className="tooltip-overlay"
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.85)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-      }}
-    >
-      <div
-        className="tooltip-modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'linear-gradient(135deg, rgba(20, 20, 20, 0.98), rgba(40, 0, 40, 0.98))',
-          border: '2px solid #FF00FF',
-          borderRadius: '16px',
-          padding: '24px',
-          maxWidth: '90%',
-          maxHeight: '80%',
-          overflowY: 'auto',
-          boxShadow: '0 0 40px rgba(255, 0, 255, 0.6)',
-          position: 'relative',
-        }}
-      >
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '12px',
-            right: '12px',
-            background: 'rgba(255, 0, 255, 0.2)',
-            border: '1.5px solid #FF00FF',
-            borderRadius: '50%',
-            width: '32px',
-            height: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: 'white',
-          }}
-        >
-          <X size={20} />
-        </button>
-        <h3 style={{
-          fontSize: '16px',
-          marginBottom: '12px',
-          background: 'linear-gradient(90deg, #FF00FF, #00FFFF)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          fontFamily: "'Press Start 2P', monospace",
-        }}>{title}</h3>
-        <p style={{
-          fontSize: '10px',
-          color: '#aaa',
-          lineHeight: 1.6,
-          marginBottom: '16px',
-          fontFamily: "'Press Start 2P', monospace",
-        }}>{description}</p>
-        {benefits && (
-          <div style={{
-            background: 'rgba(0, 255, 0, 0.05)',
-            border: '1.5px solid rgba(0, 255, 0, 0.3)',
-            borderRadius: '12px',
-            padding: '14px',
-          }}>
-            <h4 style={{
-              fontSize: '11px',
-              color: '#00FF00',
-              marginBottom: '10px',
-              fontFamily: "'Press Start 2P', monospace",
-            }}>Benefits:</h4>
-            {benefits.map((benefit, i) => (
-              <div key={i} style={{
-                fontSize: '9px',
-                color: '#00FF00',
-                margin: '6px 0',
-                paddingLeft: '4px',
-                fontFamily: "'Press Start 2P', monospace",
-              }}>{benefit}</div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  return ReactDOM.createPortal(content, document.body);
-});
+// ========== TOOLTIP DATA ==========
+const TOOLTIP_DATA = {
+  premium: {
+    title: 'PREMIUM',
+    description: 'Unlock unlimited potential with no restrictions.',
+    benefits: ['Unlimited energy - tap forever', 'No cooldown between taps', 'Unlock all levels (no level 3 cap)', 'Permanent unlock']
+  },
+  battlepass: {
+    title: 'BATTLE PASS',
+    description: 'The ultimate PyramidMeme experience.',
+    benefits: ['ALL boosts included (X2, X5)', 'Exclusive NFT reward', '+10% XP boost (permanent)', 'Special emojis', 'Unlimited energy & no cooldown']
+  },
+  boostx2: {
+    title: 'BOOST X2',
+    description: 'Double your brick gains for 24 hours.',
+    benefits: ['2X bricks per tap', 'Lasts 24 hours', 'Stackable with other boosts']
+  },
+  boostx5: {
+    title: 'BOOST X5',
+    description: 'Massive 5X multiplier for 24 hours.',
+    benefits: ['5X bricks per tap', 'Lasts 24 hours', 'Best value for grinding']
+  },
+  energy: {
+    title: 'ENERGY REFILL',
+    description: 'Instantly restore your energy.',
+    benefits: ['Instant +100 energy', 'Only needed for free users', 'Premium users have unlimited']
+  }
+};
 
 // ============================================================================
 // PYRAMID MEME EMPIRE V5 - COMPLETE SYSTEM
@@ -732,42 +659,88 @@ const PyramidMemeEmpireV5 = () => {
           <div className="notification">{notification}</div>
         )}
 
-        {/* Single Tooltip Portal - renders outside React tree */}
-        <TooltipPortal
-          isOpen={activeTooltip === 'premium'}
-          onClose={() => setActiveTooltip(null)}
-          title="PREMIUM"
-          description="Unlock unlimited potential with no restrictions."
-          benefits={['Unlimited energy - tap forever', 'No cooldown between taps', 'Unlock all levels (no level 3 cap)', 'Permanent unlock']}
-        />
-        <TooltipPortal
-          isOpen={activeTooltip === 'battlepass'}
-          onClose={() => setActiveTooltip(null)}
-          title="BATTLE PASS"
-          description="The ultimate PyramidMeme experience."
-          benefits={['ALL boosts included (X2, X5)', 'Exclusive NFT reward', '+10% XP boost (permanent)', 'Special emojis', 'Unlimited energy & no cooldown']}
-        />
-        <TooltipPortal
-          isOpen={activeTooltip === 'boostx2'}
-          onClose={() => setActiveTooltip(null)}
-          title="BOOST X2"
-          description="Double your brick gains for 24 hours."
-          benefits={['2X bricks per tap', 'Lasts 24 hours', 'Stackable with other boosts']}
-        />
-        <TooltipPortal
-          isOpen={activeTooltip === 'boostx5'}
-          onClose={() => setActiveTooltip(null)}
-          title="BOOST X5"
-          description="Massive 5X multiplier for 24 hours."
-          benefits={['5X bricks per tap', 'Lasts 24 hours', 'Best value for grinding']}
-        />
-        <TooltipPortal
-          isOpen={activeTooltip === 'energy'}
-          onClose={() => setActiveTooltip(null)}
-          title="ENERGY REFILL"
-          description="Instantly restore your energy."
-          benefits={['Instant +100 energy', 'Only needed for free users', 'Premium users have unlimited']}
-        />
+        {/* Simple Modal Tooltip */}
+        {activeTooltip && TOOLTIP_DATA[activeTooltip] && (
+          <div
+            id="tooltip-backdrop"
+            onClick={(e) => {
+              if (e.target.id === 'tooltip-backdrop') {
+                setActiveTooltip(null);
+              }
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.9)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div style={{
+              background: '#1a1a2e',
+              border: '2px solid #FF00FF',
+              borderRadius: 16,
+              padding: 24,
+              maxWidth: 320,
+              width: '100%',
+              position: 'relative',
+              boxShadow: '0 0 30px rgba(255,0,255,0.5)',
+            }}>
+              <button
+                onClick={() => setActiveTooltip(null)}
+                style={{
+                  position: 'absolute',
+                  top: 10,
+                  right: 10,
+                  background: '#FF00FF',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 30,
+                  height: 30,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#000',
+                  fontWeight: 'bold',
+                  fontSize: 16,
+                }}
+              >
+                X
+              </button>
+              <h3 style={{
+                color: '#FF00FF',
+                fontSize: 14,
+                marginBottom: 12,
+                fontFamily: 'inherit',
+              }}>{TOOLTIP_DATA[activeTooltip].title}</h3>
+              <p style={{
+                color: '#aaa',
+                fontSize: 10,
+                marginBottom: 16,
+                lineHeight: 1.5,
+                fontFamily: 'inherit',
+              }}>{TOOLTIP_DATA[activeTooltip].description}</p>
+              <div style={{
+                background: 'rgba(0,255,0,0.1)',
+                border: '1px solid rgba(0,255,0,0.3)',
+                borderRadius: 8,
+                padding: 12,
+              }}>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>Benefits:</div>
+                {TOOLTIP_DATA[activeTooltip].benefits.map((b, i) => (
+                  <div key={i} style={{ color: '#0f0', fontSize: 9, marginBottom: 4, fontFamily: 'inherit' }}>• {b}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <header className="header">
