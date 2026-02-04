@@ -185,19 +185,25 @@ const PyramidMemeEmpireV5 = () => {
   // ========== WALLET ==========
   // Get the best available wallet provider
   const getWalletProvider = () => {
-    // Check for MetaMask first (priority)
-    if (window.ethereum?.isMetaMask) {
-      // MetaMask might be in an array if multiple wallets are installed
-      if (window.ethereum.providers?.length) {
-        const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask);
-        if (metaMaskProvider) return { provider: metaMaskProvider, name: 'MetaMask' };
-      }
-      return { provider: window.ethereum, name: 'MetaMask' };
-    }
-
-    // Check for Phantom's EVM provider
+    // Check for Phantom FIRST (it also sets isMetaMask = true for compatibility)
     if (window.phantom?.ethereum) {
       return { provider: window.phantom.ethereum, name: 'Phantom' };
+    }
+
+    // Check for multiple providers (when user has multiple wallets)
+    if (window.ethereum?.providers?.length) {
+      // Try to find MetaMask specifically
+      const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask && !p.isPhantom);
+      if (metaMaskProvider) {
+        return { provider: metaMaskProvider, name: 'MetaMask' };
+      }
+      // Or just use the first provider
+      return { provider: window.ethereum.providers[0], name: 'Wallet' };
+    }
+
+    // Check for MetaMask
+    if (window.ethereum?.isMetaMask) {
+      return { provider: window.ethereum, name: 'MetaMask' };
     }
 
     // Fallback to any available ethereum provider
@@ -330,9 +336,21 @@ const PyramidMemeEmpireV5 = () => {
         setToken(authData.token);
         setIsAuthenticated(true);
 
-        // Load progress from backend
+        // Load all data from backend
         await loadProgress();
         await loadLeaderboard();
+
+        // Load quests (token is now set)
+        try {
+          setQuestsLoading(true);
+          const questsData = await apiCall('/api/quests');
+          setQuests(questsData.quests || []);
+          setTotalQuestXP(questsData.totalQuestXP || 0);
+          setQuestsLoading(false);
+        } catch (questErr) {
+          console.error('Load quests error:', questErr);
+          setQuestsLoading(false);
+        }
 
         playWhoosh();
         showNotification(`🎉 CONNECTED WITH ${name.toUpperCase()}!`);
@@ -713,11 +731,17 @@ const PyramidMemeEmpireV5 = () => {
   // ========== QUESTS ==========
   // Load quests from API
   const loadQuests = async () => {
-    if (!isAuthenticated) return;
+    const token = getToken();
+    if (!token) {
+      console.log('No token, skipping quest load');
+      return;
+    }
 
     setQuestsLoading(true);
     try {
+      console.log('Loading quests...');
       const data = await apiCall('/api/quests');
+      console.log('Quests loaded:', data);
       setQuests(data.quests || []);
       setTotalQuestXP(data.totalQuestXP || 0);
     } catch (err) {
@@ -728,9 +752,10 @@ const PyramidMemeEmpireV5 = () => {
     }
   };
 
-  // Load quests when authenticated
+  // Load quests when authenticated changes
   useEffect(() => {
     if (isAuthenticated) {
+      console.log('isAuthenticated changed to true, loading quests');
       loadQuests();
     }
   }, [isAuthenticated]);
