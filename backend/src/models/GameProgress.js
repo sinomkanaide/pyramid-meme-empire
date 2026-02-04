@@ -48,8 +48,13 @@ class GameProgress {
     const bricksEarned = Math.floor(1 * multiplier);
     const energyUsed = isPremium ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;
-    const newLevel = Math.floor(newBricks / 100) + 1;
+    const calculatedLevel = Math.floor(newBricks / 100) + 1;
     const newEnergy = isPremium ? progress.energy : Math.max(0, progress.energy - 1);
+
+    // FREE USER LEVEL CAP: Max level 3 without premium
+    const FREE_USER_MAX_LEVEL = 3;
+    const isLevelCapped = !isPremium && calculatedLevel > FREE_USER_MAX_LEVEL;
+    const newLevel = isLevelCapped ? FREE_USER_MAX_LEVEL : calculatedLevel;
 
     // Update game progress
     const result = await db.query(
@@ -75,13 +80,15 @@ class GameProgress {
     );
 
     const updated = result.rows[0];
-    const leveledUp = newLevel > progress.level;
+    const leveledUp = newLevel > progress.level && !isLevelCapped;
 
     return {
       ...updated,
       bricksEarned,
       leveledUp,
-      newLevel: leveledUp ? newLevel : null
+      newLevel: leveledUp ? newLevel : null,
+      isLevelCapped,
+      maxFreeLevel: FREE_USER_MAX_LEVEL
     };
   }
 

@@ -18,16 +18,22 @@ router.get('/progress', async (req, res) => {
       return res.status(404).json({ error: 'Game progress not found' });
     }
 
+    const FREE_USER_MAX_LEVEL = 3;
+    const isLevelCapped = !req.user.isPremium && progress.level >= FREE_USER_MAX_LEVEL;
+
     res.json({
       bricks: progress.bricks,
       level: progress.level,
       pmeTokens: progress.pme_tokens,
       energy: progress.energy,
+      maxEnergy: progress.max_energy || 100,
       totalTaps: progress.total_taps,
       boostMultiplier: parseFloat(progress.boost_multiplier),
       boostExpiresAt: progress.boost_expires_at,
       rank,
-      isPremium: req.user.isPremium
+      isPremium: req.user.isPremium,
+      isLevelCapped,
+      maxFreeLevel: FREE_USER_MAX_LEVEL
     });
   } catch (error) {
     console.error('Get progress error:', error);
@@ -56,7 +62,10 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       energy: result.energy,
       leveledUp: result.leveledUp,
       newLevel: result.newLevel,
-      totalTaps: result.total_taps
+      totalTaps: result.total_taps,
+      isLevelCapped: result.isLevelCapped,
+      maxFreeLevel: result.maxFreeLevel,
+      isPremium: req.user.isPremium
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {

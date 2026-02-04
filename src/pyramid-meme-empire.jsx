@@ -77,7 +77,10 @@ const PyramidMemeEmpireV5 = () => {
   const [showFireworks, setShowFireworks] = useState(false);
   const [referralLink, setReferralLink] = useState('');
   const [activeTooltip, setActiveTooltip] = useState(null);
-  
+  const [showLevelCapModal, setShowLevelCapModal] = useState(false);
+  const [isLevelCapped, setIsLevelCapped] = useState(false);
+  const MAX_FREE_LEVEL = 3;
+
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
     { rank: 1, name: 'CryptoKing', taps: 8934, winnings: '23W' },
@@ -302,8 +305,10 @@ const PyramidMemeEmpireV5 = () => {
       setDisplayBricks(data.bricks || 0);
       setLevel(data.level || 1);
       setEnergy(data.energy || 100);
+      setMaxEnergy(data.maxEnergy || 100);
       setIsPremium(data.isPremium || false);
       setUserRank(data.rank || 0);
+      setIsLevelCapped(data.isLevelCapped || false);
     } catch (err) {
       console.error('Load progress error:', err);
     }
@@ -349,9 +354,16 @@ const PyramidMemeEmpireV5 = () => {
         setBricks(result.bricks);
         setLevel(result.level);
         setEnergy(result.energy);
+        setIsPremium(result.isPremium);
 
         if (result.leveledUp) {
           triggerLevelUp();
+        }
+
+        // Check if user hit the free level cap
+        if (result.isLevelCapped && !isLevelCapped) {
+          setIsLevelCapped(true);
+          setShowLevelCapModal(true);
         }
       } catch (err) {
         if (err.message?.includes('cooldown') || err.message?.includes('Wait')) {
@@ -370,10 +382,16 @@ const PyramidMemeEmpireV5 = () => {
       if (!isPremium && !hasBattlePass) {
         setEnergy(prev => Math.max(0, prev - 1));
       }
-      const newLevel = Math.floor(bricks / 100) + 1;
+      const newLevel = Math.min(Math.floor(bricks / 100) + 1, isPremium ? 999 : MAX_FREE_LEVEL);
       if (newLevel > level) {
-        setLevel(newLevel);
-        triggerLevelUp();
+        if (!isPremium && newLevel >= MAX_FREE_LEVEL) {
+          setLevel(MAX_FREE_LEVEL);
+          setIsLevelCapped(true);
+          setShowLevelCapModal(true);
+        } else {
+          setLevel(newLevel);
+          triggerLevelUp();
+        }
       }
     }
 
@@ -756,6 +774,131 @@ const PyramidMemeEmpireV5 = () => {
           </div>
         )}
 
+        {/* Level Cap Modal - Premium Upsell */}
+        {showLevelCapModal && (
+          <div
+            className="level-cap-backdrop"
+            onMouseDown={() => setShowLevelCapModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.95)',
+              zIndex: 10001,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #2d1f3d)',
+                border: '3px solid #FFD700',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 340,
+                width: '100%',
+                position: 'relative',
+                boxShadow: '0 0 50px rgba(255,215,0,0.4)',
+                textAlign: 'center',
+              }}>
+              <button
+                onMouseDown={() => setShowLevelCapModal(false)}
+                onClick={() => setShowLevelCapModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: 16,
+                }}
+              >
+                ✕
+              </button>
+
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+
+              <h3 style={{
+                color: '#FFD700',
+                fontSize: 16,
+                marginBottom: 12,
+                fontFamily: 'inherit',
+                textShadow: '0 0 10px rgba(255,215,0,0.5)',
+              }}>LEVEL 3 REACHED!</h3>
+
+              <p style={{
+                color: '#aaa',
+                fontSize: 10,
+                marginBottom: 20,
+                lineHeight: 1.6,
+                fontFamily: 'inherit',
+              }}>
+                Free users are limited to Level 3.<br/>
+                Upgrade to Premium to unlock unlimited levels!
+              </p>
+
+              <div style={{
+                background: 'rgba(255,215,0,0.1)',
+                border: '2px solid rgba(255,215,0,0.3)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+              }}>
+                <div style={{ color: '#FFD700', fontSize: 11, marginBottom: 10, fontFamily: 'inherit' }}>Premium Benefits:</div>
+                <div style={{ color: '#0f0', fontSize: 9, marginBottom: 6, fontFamily: 'inherit' }}>✓ Unlimited Levels</div>
+                <div style={{ color: '#0f0', fontSize: 9, marginBottom: 6, fontFamily: 'inherit' }}>✓ Infinite Energy</div>
+                <div style={{ color: '#0f0', fontSize: 9, marginBottom: 6, fontFamily: 'inherit' }}>✓ No Tap Cooldown</div>
+                <div style={{ color: '#0f0', fontSize: 9, fontFamily: 'inherit' }}>✓ Permanent Access</div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowLevelCapModal(false);
+                  setCurrentTab('shop');
+                }}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  color: '#000',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 0 30px rgba(255,215,0,0.5)',
+                }}
+              >
+                GET PREMIUM - $2
+              </button>
+
+              <div style={{
+                marginTop: 12,
+                fontSize: 8,
+                color: '#666',
+                fontFamily: 'inherit',
+              }}>
+                One-time payment • Forever access
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <header className="header">
           <div className="logo">PYRAMIDMEME</div>
@@ -836,12 +979,21 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
                 </div>
                 
-                <div className="level-badge">
-                  Level {level}
+                <div className={`level-badge ${isLevelCapped ? 'level-capped' : ''}`}>
+                  Level {level} {isLevelCapped && '🔒'}
                 </div>
-                
+
+                {isLevelCapped && (
+                  <div
+                    className="premium-hint"
+                    onClick={() => setShowLevelCapModal(true)}
+                  >
+                    ⭐ Unlock Level 4+ with Premium
+                  </div>
+                )}
+
                 <div className="tap-hint">
-                  tap to stack
+                  {isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
                 </div>
               </div>
 
@@ -1626,6 +1778,40 @@ const PyramidMemeEmpireV5 = () => {
           color: black;
           font-weight: bold;
           box-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+        }
+
+        .level-badge.level-capped {
+          background: linear-gradient(135deg, #FFD700, #FF6B00);
+          border-color: #FFD700;
+          animation: pulse-gold 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-gold {
+          0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+          50% { box-shadow: 0 0 35px rgba(255, 215, 0, 0.9); }
+        }
+
+        .premium-hint {
+          margin-top: 10px;
+          padding: 8px 16px;
+          background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.2));
+          border: 1.5px solid #FFD700;
+          border-radius: 12px;
+          font-size: 9px;
+          color: #FFD700;
+          cursor: pointer;
+          transition: all 0.3s;
+          animation: glow-hint 3s ease-in-out infinite;
+        }
+
+        .premium-hint:hover {
+          background: linear-gradient(135deg, rgba(255, 215, 0, 0.4), rgba(255, 165, 0, 0.4));
+          transform: scale(1.05);
+        }
+
+        @keyframes glow-hint {
+          0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+          50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
         }
 
         .tap-hint {
