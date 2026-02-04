@@ -3,12 +3,12 @@ const { ethers } = require('ethers');
 
 class Transaction {
   // Create new transaction record
-  static async create(userId, txHash, type, amount, itemPurchased = null) {
+  static async create(userId, txHash, type, amount, itemName = null) {
     const result = await db.query(
-      `INSERT INTO transactions (user_id, tx_hash, type, amount, item_purchased)
+      `INSERT INTO transactions (user_id, tx_hash, type, amount, item_name)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [userId, txHash.toLowerCase(), type, amount, itemPurchased]
+      [userId, txHash.toLowerCase(), type, amount, itemName]
     );
     return result.rows[0];
   }

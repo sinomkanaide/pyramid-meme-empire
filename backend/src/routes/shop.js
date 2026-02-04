@@ -264,7 +264,7 @@ router.get('/transactions', async (req, res) => {
         amount: tx.amount,
         currency: tx.currency,
         status: tx.status,
-        item: tx.item_purchased,
+        item: tx.item_name,
         createdAt: tx.created_at,
         confirmedAt: tx.confirmed_at
       }))
@@ -303,7 +303,7 @@ router.post('/verify',
         transaction: {
           id: transaction.id,
           status: transaction.status,
-          item: transaction.item_purchased
+          item: transaction.item_name
         },
         onChain: verification
       });
