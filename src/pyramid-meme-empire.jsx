@@ -1849,8 +1849,21 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
               </div>
 
-              {/* Active Boost Indicator */}
-              {isBoostActive && (
+              {/* Battle Pass Banner - Always show if has BP */}
+              {hasBattlePass && (
+                <div className="boost-indicator boost-battlepass">
+                  <div className="boost-info">
+                    <span className="boost-icon">🏆</span>
+                    <span className="boost-label">BATTLE PASS ACTIVE</span>
+                  </div>
+                  <div className="boost-timer bp-timer">
+                    {battlePassInfo?.daysRemaining ? `${battlePassInfo.daysRemaining}d remaining` : '30 days'}
+                  </div>
+                </div>
+              )}
+
+              {/* Temporary Boost Indicator - Only show if NOT from Battle Pass */}
+              {isBoostActive && boostType !== 'battle_pass' && !hasBattlePass && (
                 <div className={`boost-indicator ${boostType === 'x5' ? 'boost-x5' : 'boost-x2'}`}>
                   <div className="boost-info">
                     <span className="boost-icon">{boostType === 'x5' ? '🔥' : '⚡'}</span>
@@ -1938,10 +1951,31 @@ const PyramidMemeEmpireV5 = () => {
           {/* ARENA TAB */}
           {currentTab === 'arena' && (
             <div className="arena-view">
+              {/* Battle Pass Required Overlay - Fixed position over everything */}
+              {!hasBattlePass && (
+                <div className="arena-locked-overlay">
+                  <div className="locked-content">
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                    <h3 style={{ color: '#FF00FF', marginBottom: 8, fontSize: 14 }}>
+                      BATTLE PASS REQUIRED
+                    </h3>
+                    <p style={{ color: '#888', fontSize: 10, marginBottom: 16 }}>
+                      Get Battle Pass to compete in the Arena and win USDC rewards!
+                    </p>
+                    <button
+                      onClick={() => setShowBattlePassModal(true)}
+                      className="arena-get-bp-btn"
+                    >
+                      GET BATTLE PASS - $5
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="arena-scroll">
                 <h2 className="arena-title">🏆 TAP ARENA</h2>
                 <p className="arena-subtitle">
-                  {hasBattlePass ? 'Battle for $PME - Top Tappers Win!' : 'Battle Pass Required'}
+                  {hasBattlePass ? 'Compete for USDC prizes!' : 'Battle Pass Required'}
                 </p>
 
                 {/* Battle Pass Badge for BP users */}
@@ -1962,17 +1996,14 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
 
                   {leaderboard.map((player) => (
-                    <div key={player.rank} className={`leaderboard-row ${player.rank <= 3 ? 'top-three' : ''} ${player.hasBattlePass ? 'bp-player' : ''}`}>
+                    <div key={player.rank} className={`leaderboard-row ${player.rank <= 3 ? 'top-three' : ''}`}>
                       <div className="rank-cell">
                         {player.rank === 1 && '🥇'}
                         {player.rank === 2 && '🥈'}
                         {player.rank === 3 && '🥉'}
                         {player.rank > 3 && `#${player.rank}`}
                       </div>
-                      <div className="name-cell">
-                        {player.hasBattlePass && <span className="player-bp-badge">🏆</span>}
-                        {player.name}
-                      </div>
+                      <div className="name-cell">{player.name}</div>
                       <div className="taps-cell">{player.taps.toLocaleString()}</div>
                       <div className="win-cell neon-green">{player.winnings}</div>
                     </div>
@@ -1995,30 +2026,9 @@ const PyramidMemeEmpireV5 = () => {
                   )}
                 </div>
 
-                {/* Battle Pass Required Overlay */}
-                {!hasBattlePass && (
-                  <div className="arena-locked-overlay">
-                    <div className="locked-content">
-                      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-                      <h3 style={{ color: '#FF00FF', marginBottom: 8, fontSize: 14 }}>
-                        BATTLE PASS REQUIRED
-                      </h3>
-                      <p style={{ color: '#888', fontSize: 10, marginBottom: 16 }}>
-                        Get Battle Pass to compete in the Arena and win $PME rewards!
-                      </p>
-                      <button
-                        onClick={() => setShowBattlePassModal(true)}
-                        className="arena-get-bp-btn"
-                      >
-                        GET BATTLE PASS - $5
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <div className="arena-info">
-                  <p>💰 Top 10 share 70% of weekly $PME pool</p>
-                  <p>⚡ Battle Pass holders compete for prizes!</p>
+                  <p>💰 Top 10 compete for $1,000 USDC prizes</p>
+                  <p>🏆 Top 100 compete for $1,000 USDC</p>
                 </div>
               </div>
             </div>
@@ -2718,6 +2728,21 @@ const PyramidMemeEmpireV5 = () => {
           box-shadow: 0 0 20px rgba(255, 50, 50, 0.4);
         }
 
+        .boost-battlepass {
+          background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 165, 0, 0.3));
+          border: 2px solid #FFD700;
+          box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+        }
+
+        .boost-battlepass .boost-label {
+          color: #FFD700;
+        }
+
+        .boost-battlepass .bp-timer {
+          color: #FFD700;
+          font-size: 12px;
+        }
+
         @keyframes boost-pulse {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.02); }
@@ -3197,27 +3222,36 @@ const PyramidMemeEmpireV5 = () => {
         }
 
         .leaderboard.leaderboard-locked {
-          filter: blur(4px);
-          opacity: 0.5;
+          filter: blur(6px);
+          opacity: 0.4;
           pointer-events: none;
+        }
+
+        .arena-view {
+          position: relative;
         }
 
         .arena-locked-overlay {
           position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          z-index: 10;
-          text-align: center;
-          padding: 24px;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 20;
+          background: rgba(0, 0, 0, 0.7);
         }
 
         .locked-content {
-          background: rgba(26, 26, 46, 0.95);
+          background: rgba(26, 26, 46, 0.98);
           border: 2px solid #FF00FF;
           border-radius: 16px;
-          padding: 24px;
-          box-shadow: 0 0 40px rgba(255, 0, 255, 0.5);
+          padding: 28px;
+          box-shadow: 0 0 50px rgba(255, 0, 255, 0.6);
+          text-align: center;
+          max-width: 300px;
         }
 
         .arena-get-bp-btn {
