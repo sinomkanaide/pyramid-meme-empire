@@ -92,6 +92,8 @@ const PyramidMemeEmpireV5 = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [showEnergyModal, setShowEnergyModal] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [isTapping, setIsTapping] = useState(false);
+  const tapInFlight = useRef(false);
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -353,13 +355,18 @@ const PyramidMemeEmpireV5 = () => {
   const handleTap = async (e) => {
     const now = Date.now();
 
-    // Check cooldown for free users
+    // CRITICAL: Prevent concurrent requests - only one tap at a time
+    if (tapInFlight.current) {
+      return; // Silently ignore spam clicks while processing
+    }
+
+    // Check cooldown for free users (client-side pre-check)
     if (!isPremium && !hasBattlePass && (now - lastTapTime) < 2000) {
       showNotification('⏱️ COOLDOWN!');
       return;
     }
 
-    // Check energy for free users
+    // Check energy for free users (client-side pre-check)
     if (!isPremium && !hasBattlePass && energy <= 0) {
       showNotification('⚡ NO ENERGY! WAIT OR GO PREMIUM');
       return;
@@ -367,6 +374,10 @@ const PyramidMemeEmpireV5 = () => {
 
     // Send tap to backend if authenticated
     if (isAuthenticated) {
+      // Lock to prevent concurrent requests
+      tapInFlight.current = true;
+      setIsTapping(true);
+
       try {
         const result = await apiCall('/api/game/tap', { method: 'POST' });
         setBricks(result.bricks);
@@ -384,22 +395,32 @@ const PyramidMemeEmpireV5 = () => {
           triggerLevelUp();
         }
 
-        // Check if user hit the free level cap
-        if (result.isLevelCapped && !isLevelCapped) {
+        // Update level cap based on backend response AND premium status
+        // If premium, ALWAYS clear level cap
+        if (result.isPremium) {
+          setIsLevelCapped(false);
+        } else if (result.isLevelCapped && !isLevelCapped) {
           setIsLevelCapped(true);
           setShowLevelCapModal(true);
         }
+
+        // Update last tap time for client-side cooldown
+        setLastTapTime(now);
       } catch (err) {
-        if (err.message?.includes('cooldown') || err.message?.includes('Wait')) {
+        if (err.message?.includes('cooldown') || err.message?.includes('Wait') || err.message?.includes('Too many')) {
           showNotification('⏱️ COOLDOWN!');
-          return;
         } else if (err.message?.includes('energy')) {
           showNotification('⚡ NO ENERGY!');
-          return;
+        } else {
+          // Log but don't show notification for other errors
+          console.error('Tap API error:', err);
         }
-        // Fallback to local if API fails
-        console.error('Tap API error:', err);
+      } finally {
+        // ALWAYS unlock after request completes
+        tapInFlight.current = false;
+        setIsTapping(false);
       }
+      return; // Don't run local mode
     } else {
       // Local mode (not authenticated)
       setBricks(prev => prev + 1);
@@ -736,6 +757,7 @@ const PyramidMemeEmpireV5 = () => {
 
       if (result.success && result.isPremium) {
         setIsPremium(true);
+        setIsLevelCapped(false); // CRITICAL: Remove level cap when premium
         setShowPremiumModal(false);
         showNotification('👑 Premium Activated! Unlimited Power!');
         playWhoosh();
@@ -1592,11 +1614,11 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
                 </div>
                 
-                <div className={`level-badge ${isLevelCapped ? 'level-capped' : ''}`}>
-                  Level {level} {isLevelCapped && '🔒'}
+                <div className={`level-badge ${isLevelCapped && !isPremium ? 'level-capped' : ''} ${isPremium ? 'level-premium' : ''}`}>
+                  Level {level} {isPremium && '👑'} {isLevelCapped && !isPremium && '🔒'}
                 </div>
 
-                {isLevelCapped && (
+                {isLevelCapped && !isPremium && (
                   <div
                     className="premium-hint"
                     onClick={() => setShowLevelCapModal(true)}
@@ -1606,7 +1628,7 @@ const PyramidMemeEmpireV5 = () => {
                 )}
 
                 <div className="tap-hint">
-                  {isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
+                  {isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
                 </div>
               </div>
 
@@ -2484,6 +2506,17 @@ const PyramidMemeEmpireV5 = () => {
           background: linear-gradient(135deg, #FFD700, #FF6B00);
           border-color: #FFD700;
           animation: pulse-gold 2s ease-in-out infinite;
+        }
+
+        .level-badge.level-premium {
+          background: linear-gradient(135deg, #FFD700, #FFA500);
+          border-color: #FFD700;
+          animation: pulse-premium 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-premium {
+          0%, 100% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); }
+          50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.7); }
         }
 
         @keyframes pulse-gold {

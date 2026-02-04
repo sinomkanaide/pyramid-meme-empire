@@ -97,8 +97,38 @@ const rateLimit = (maxRequests = 100, windowMs = 60000) => {
   };
 };
 
-// Tap rate limiter (stricter)
-const tapRateLimit = rateLimit(30, 60000); // 30 taps per minute max
+// Tap rate limiter - different limits for premium vs free users
+const tapRateLimit = (req, res, next) => {
+  const key = req.user?.id || req.ip;
+  const now = Date.now();
+
+  // Premium users get 120 taps/min, free users get 30 taps/min
+  const isPremium = req.user?.isPremium;
+  const maxRequests = isPremium ? 120 : 30;
+  const windowMs = 60000;
+
+  if (!rateLimits.has(key)) {
+    rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+
+  const limit = rateLimits.get(key);
+
+  if (now > limit.resetAt) {
+    rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return next();
+  }
+
+  if (limit.count >= maxRequests) {
+    return res.status(429).json({
+      error: 'Too many requests',
+      retryAfter: Math.ceil((limit.resetAt - now) / 1000)
+    });
+  }
+
+  limit.count++;
+  next();
+};
 
 module.exports = {
   authenticateToken,
