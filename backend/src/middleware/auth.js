@@ -44,14 +44,14 @@ const verifySignature = (message, signature, expectedAddress) => {
 };
 
 // Generate auth message for signing
-const generateAuthMessage = (walletAddress, nonce) => {
+const generateAuthMessage = (walletAddress, nonce, timestamp) => {
   return `Welcome to Pyramid Meme Empire!
 
 Sign this message to authenticate your wallet.
 
 Wallet: ${walletAddress}
 Nonce: ${nonce}
-Timestamp: ${Date.now()}
+Timestamp: ${timestamp}
 
 This signature will not trigger any blockchain transaction or cost any gas fees.`;
 };

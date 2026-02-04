@@ -23,11 +23,13 @@ router.get('/nonce/:walletAddress', (req, res) => {
   }
 
   const nonce = crypto.randomBytes(16).toString('hex');
-  const message = generateAuthMessage(walletAddress, nonce);
+  const timestamp = Date.now();
+  const message = generateAuthMessage(walletAddress, nonce, timestamp);
 
-  // Store nonce for 5 minutes
+  // Store nonce and timestamp for 5 minutes
   nonces.set(walletAddress.toLowerCase(), {
     nonce,
+    timestamp,
     expiresAt: Date.now() + 300000
   });
 
@@ -49,14 +51,14 @@ router.post('/verify',
     const referralCode = req.body.referralCode || null;
 
     try {
-      // Get stored nonce
-      const storedNonce = nonces.get(walletAddress.toLowerCase());
+      // Get stored nonce and timestamp
+      const storedData = nonces.get(walletAddress.toLowerCase());
 
-      if (!storedNonce || Date.now() > storedNonce.expiresAt) {
+      if (!storedData || Date.now() > storedData.expiresAt) {
         return res.status(400).json({ error: 'Nonce expired or not found. Request a new one.' });
       }
 
-      const message = generateAuthMessage(walletAddress, storedNonce.nonce);
+      const message = generateAuthMessage(walletAddress, storedData.nonce, storedData.timestamp);
 
       // Verify signature
       if (!verifySignature(message, signature, walletAddress)) {
