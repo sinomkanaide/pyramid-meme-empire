@@ -186,47 +186,83 @@ const PyramidMemeEmpireV5 = () => {
   }, [walletAddress]);
 
   // ========== WALLET ==========
+  // Get the best available wallet provider
+  const getWalletProvider = () => {
+    // Check for MetaMask first (priority)
+    if (window.ethereum?.isMetaMask) {
+      // MetaMask might be in an array if multiple wallets are installed
+      if (window.ethereum.providers?.length) {
+        const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask);
+        if (metaMaskProvider) return { provider: metaMaskProvider, name: 'MetaMask' };
+      }
+      return { provider: window.ethereum, name: 'MetaMask' };
+    }
+
+    // Check for Phantom's EVM provider
+    if (window.phantom?.ethereum) {
+      return { provider: window.phantom.ethereum, name: 'Phantom' };
+    }
+
+    // Fallback to any available ethereum provider
+    if (window.ethereum) {
+      return { provider: window.ethereum, name: 'Wallet' };
+    }
+
+    return null;
+  };
+
   const connectWallet = async () => {
     setIsConnecting(true);
     try {
-      if (typeof window.ethereum === 'undefined') {
-        showNotification('⚠️ INSTALL METAMASK');
+      // Get wallet provider
+      const walletInfo = getWalletProvider();
+
+      if (!walletInfo) {
+        showNotification('⚠️ INSTALL METAMASK OR PHANTOM');
         return;
       }
+
+      const { provider, name } = walletInfo;
+      console.log(`Connecting with ${name}...`);
 
       // Request accounts with timeout
       let accounts;
       try {
         accounts = await Promise.race([
-          window.ethereum.request({ method: 'eth_requestAccounts' }),
+          provider.request({ method: 'eth_requestAccounts' }),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), 30000)
           )
         ]);
       } catch (err) {
         if (err.message === 'TIMEOUT') {
-          showNotification('⏱️ METAMASK TIMEOUT - REFRESH PAGE');
+          showNotification(`⏱️ ${name.toUpperCase()} TIMEOUT - TRY AGAIN`);
         } else if (err.code === 4001) {
           showNotification('❌ CONNECTION REJECTED');
         } else if (err.message?.includes('service worker')) {
-          showNotification('🔧 METAMASK ERROR - RESTART BROWSER');
+          showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
         } else {
-          showNotification('❌ WALLET ERROR - TRY AGAIN');
+          showNotification(`❌ ${name.toUpperCase()} ERROR - TRY AGAIN`);
         }
         console.error('Wallet connect error:', err);
         return;
       }
 
+      if (!accounts || accounts.length === 0) {
+        showNotification('❌ NO ACCOUNTS FOUND');
+        return;
+      }
+
       // Switch to Base network
       try {
-        await window.ethereum.request({
+        await provider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: '0x2105' }],
         });
       } catch (switchError) {
-        if (switchError.code === 4902) {
+        if (switchError.code === 4902 || switchError.message?.includes('Unrecognized chain')) {
           try {
-            await window.ethereum.request({
+            await provider.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: '0x2105',
@@ -237,13 +273,16 @@ const PyramidMemeEmpireV5 = () => {
               }]
             });
           } catch (addError) {
-            showNotification('❌ FAILED TO ADD BASE NETWORK');
+            showNotification('❌ ADD BASE NETWORK IN WALLET');
             console.error('Add chain error:', addError);
             return;
           }
         } else if (switchError.code === 4001) {
           showNotification('❌ NETWORK SWITCH REJECTED');
           return;
+        } else {
+          // Some wallets don't support network switching - continue anyway
+          console.warn('Network switch warning:', switchError);
         }
       }
 
@@ -262,7 +301,7 @@ const PyramidMemeEmpireV5 = () => {
         let signature;
         try {
           signature = await Promise.race([
-            window.ethereum.request({
+            provider.request({
               method: 'personal_sign',
               params: [message, wallet],
             }),
@@ -276,7 +315,7 @@ const PyramidMemeEmpireV5 = () => {
           } else if (signError.code === 4001) {
             showNotification('❌ SIGNATURE REJECTED');
           } else if (signError.message?.includes('service worker')) {
-            showNotification('🔧 METAMASK ERROR - RESTART BROWSER');
+            showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
           } else {
             showNotification('❌ SIGN FAILED - TRY AGAIN');
           }
@@ -299,7 +338,7 @@ const PyramidMemeEmpireV5 = () => {
         await loadLeaderboard();
 
         playWhoosh();
-        showNotification('🎉 WELCOME!');
+        showNotification(`🎉 CONNECTED WITH ${name.toUpperCase()}!`);
       } catch (authError) {
         console.error('Auth error:', authError);
         if (authError.message?.includes('fetch')) {
@@ -310,7 +349,7 @@ const PyramidMemeEmpireV5 = () => {
       }
     } catch (error) {
       console.error('Unexpected error:', error);
-      showNotification('❌ UNEXPECTED ERROR - REFRESH PAGE');
+      showNotification('❌ CONNECTION FAILED - TRY AGAIN');
     } finally {
       setIsConnecting(false);
     }
