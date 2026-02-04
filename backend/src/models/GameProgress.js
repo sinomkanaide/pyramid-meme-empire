@@ -11,7 +11,7 @@ class GameProgress {
   }
 
   // Process a tap
-  static async processTap(userId, isPremium = false) {
+  static async processTap(userId, isPremium = false, sessionId = null, ipAddress = null) {
     const progress = await this.findByUserId(userId);
 
     if (!progress) {
@@ -38,13 +38,20 @@ class GameProgress {
     let multiplier = parseFloat(progress.boost_multiplier) || 1;
     if (progress.boost_expires_at && new Date(progress.boost_expires_at) < now) {
       multiplier = 1;
+      // Reset boost if expired
+      await db.query(
+        `UPDATE game_progress SET boost_multiplier = 1, boost_type = NULL WHERE user_id = $1`,
+        [userId]
+      );
     }
 
     const bricksEarned = Math.floor(1 * multiplier);
+    const energyUsed = isPremium ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;
     const newLevel = Math.floor(newBricks / 100) + 1;
     const newEnergy = isPremium ? progress.energy : Math.max(0, progress.energy - 1);
 
+    // Update game progress
     const result = await db.query(
       `UPDATE game_progress
        SET bricks = $1,
@@ -52,11 +59,19 @@ class GameProgress {
            energy = $3,
            last_tap_at = NOW(),
            total_taps = total_taps + 1,
-           boost_multiplier = $4,
+           total_bricks_earned = total_bricks_earned + $4,
+           boost_multiplier = $5,
            updated_at = NOW()
-       WHERE user_id = $5
+       WHERE user_id = $6
        RETURNING *`,
-      [newBricks, newLevel, newEnergy, multiplier, userId]
+      [newBricks, newLevel, newEnergy, bricksEarned, multiplier, userId]
+    );
+
+    // Log tap to taps table for analytics
+    await db.query(
+      `INSERT INTO taps (user_id, bricks_earned, multiplier, energy_used, session_id, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, bricksEarned, multiplier, energyUsed, sessionId, ipAddress]
     );
 
     const updated = result.rows[0];

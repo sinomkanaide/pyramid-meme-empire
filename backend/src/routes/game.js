@@ -38,7 +38,15 @@ router.get('/progress', async (req, res) => {
 // POST /game/tap - Process a tap
 router.post('/tap', tapRateLimit, async (req, res) => {
   try {
-    const result = await GameProgress.processTap(req.user.id, req.user.isPremium);
+    // Get IP address for analytics
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || null;
+
+    const result = await GameProgress.processTap(
+      req.user.id,
+      req.user.isPremium,
+      null, // sessionId - can be implemented later
+      ipAddress
+    );
 
     res.json({
       success: true,
@@ -47,7 +55,8 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       level: result.level,
       energy: result.energy,
       leveledUp: result.leveledUp,
-      newLevel: result.newLevel
+      newLevel: result.newLevel,
+      totalTaps: result.total_taps
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {
