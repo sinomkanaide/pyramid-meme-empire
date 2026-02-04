@@ -122,8 +122,9 @@ const PyramidMemeEmpireV5 = () => {
   }, []);
 
   useEffect(() => {
+    if (activeTooltip) return; // Pause when tooltip is open
     const interval = setInterval(() => {
-      setFloatingCoins(coins => 
+      setFloatingCoins(coins =>
         coins.map(coin => ({
           ...coin,
           y: coin.y >= 100 ? -10 : coin.y + (coin.speed * 0.05),
@@ -131,7 +132,7 @@ const PyramidMemeEmpireV5 = () => {
       );
     }, 50);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTooltip]);
 
   // ========== NUMBER COUNTING ==========
   useEffect(() => {
@@ -444,6 +445,7 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   useEffect(() => {
+    if (activeTooltip) return; // Pause when tooltip is open
     const interval = setInterval(() => {
       setParticles(particles =>
         particles.map(p => ({
@@ -456,7 +458,7 @@ const PyramidMemeEmpireV5 = () => {
       );
     }, 50);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTooltip]);
 
   // ========== LEVEL UP ==========
   const triggerLevelUp = () => {
@@ -503,12 +505,12 @@ const PyramidMemeEmpireV5 = () => {
 
   // ========== ENERGY REGEN ==========
   useEffect(() => {
-    if (isPremium || hasBattlePass) return;
+    if (isPremium || hasBattlePass || activeTooltip) return; // Pause when tooltip is open
     const interval = setInterval(() => {
       setEnergy(prev => Math.min(maxEnergy, prev + 1));
     }, 30000); // 1 energy per 30 seconds
     return () => clearInterval(interval);
-  }, [isPremium, hasBattlePass, maxEnergy]);
+  }, [isPremium, hasBattlePass, maxEnergy, activeTooltip]);
 
   // ========== NOTIFICATION ==========
   const showNotification = (message) => {
