@@ -9,6 +9,15 @@ const router = express.Router();
 
 // Shop items configuration
 const SHOP_ITEMS = {
+  battle_pass: {
+    id: 'battle_pass',
+    name: 'BATTLE PASS',
+    description: 'X5 boost + 10% XP + Leaderboard access + Referral bonuses + Golden pyramid',
+    price: 5.00, // USDC
+    icon: '🏆',
+    type: 'battle_pass',
+    duration: 30 // days
+  },
   premium: {
     id: 'premium',
     name: 'PREMIUM',
@@ -180,6 +189,44 @@ router.post('/activate',
       let boostInfo = null;
 
       switch (item.type) {
+        case 'battle_pass':
+          // Check if already has Battle Pass
+          const hasBattlePass = await User.checkBattlePass(req.user.id);
+          if (hasBattlePass) {
+            return res.status(400).json({
+              error: 'You already have an active Battle Pass!',
+              hasBattlePass: true
+            });
+          }
+
+          // Activate Battle Pass
+          const battlePassUser = await User.setBattlePass(req.user.id);
+
+          // Mark referral as verified (if user was referred)
+          const referrerId = await User.getReferrerId(req.user.id);
+          if (referrerId) {
+            await User.verifyReferral(req.user.id, 'battle_pass');
+          }
+
+          // Get referral code for sharing
+          const referralCode = await User.getReferralCode(req.user.id);
+
+          result = {
+            message: 'Battle Pass activated for 30 days!',
+            type: 'battle_pass',
+            hasBattlePass: true,
+            expiresAt: battlePassUser.battle_pass_expires_at,
+            referralCode,
+            features: [
+              'Permanent X5 boost',
+              '+10% XP bonus',
+              'Leaderboard access',
+              '+10% XP per verified referral',
+              'Golden pyramid skin'
+            ]
+          };
+          break;
+
         case 'subscription':
           // Check if already premium
           if (user.is_premium) {
@@ -190,6 +237,13 @@ router.post('/activate',
           }
 
           await User.setPremium(req.user.id);
+
+          // Mark referral as verified (if user was referred)
+          const premiumReferrerId = await User.getReferrerId(req.user.id);
+          if (premiumReferrerId) {
+            await User.verifyReferral(req.user.id, 'premium');
+          }
+
           result = {
             message: 'Premium activated forever!',
             type: 'premium',
@@ -240,11 +294,13 @@ router.post('/activate',
 
         case 'consumable':
           if (itemId === 'energy_refill') {
-            // Check if user is premium (premium users have unlimited energy)
-            if (user.is_premium) {
+            // Check if user is premium or has Battle Pass (they have unlimited energy)
+            const userHasBattlePass = await User.checkBattlePass(req.user.id);
+            if (user.is_premium || userHasBattlePass) {
               return res.status(400).json({
-                error: 'Premium users have unlimited energy!',
-                isPremium: true
+                error: 'Premium and Battle Pass users have unlimited energy!',
+                isPremium: user.is_premium,
+                hasBattlePass: userHasBattlePass
               });
             }
 

@@ -10,8 +10,8 @@ const TOOLTIP_DATA = {
   },
   battlepass: {
     title: 'BATTLE PASS',
-    description: 'The ultimate PyramidMeme experience.',
-    benefits: ['ALL boosts included (X2, X5)', 'Exclusive NFT reward', '+10% XP boost (permanent)', 'Special emojis', 'Unlimited energy & no cooldown']
+    description: 'The ultimate PyramidMeme experience for 30 days.',
+    benefits: ['Permanent X5 boost', '+10% XP bonus', 'Leaderboard access', '+10% XP per verified referral', 'Golden pyramid skin', 'Unlimited energy & no cooldown']
   },
   boostx2: {
     title: 'BOOST X2',
@@ -92,9 +92,13 @@ const PyramidMemeEmpireV5 = () => {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [showEnergyModal, setShowEnergyModal] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showBattlePassModal, setShowBattlePassModal] = useState(false);
   const [isTapping, setIsTapping] = useState(false);
   const tapInFlight = useRef(false);
   const [xpProgress, setXpProgress] = useState({ current: 0, needed: 100, percent: 0 });
+  const [referralStats, setReferralStats] = useState({ total: 0, verified: 0, bonusPercent: 0 });
+  const [battlePassInfo, setBattlePassInfo] = useState(null);
+  const [referralCode, setReferralCode] = useState('');
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -322,6 +326,7 @@ const PyramidMemeEmpireV5 = () => {
       setEnergy(data.energy || 100);
       setMaxEnergy(data.maxEnergy || 100);
       setIsPremium(data.isPremium || false);
+      setHasBattlePass(data.hasBattlePass || false);
       setUserRank(data.rank || 0);
       setIsLevelCapped(data.isLevelCapped || false);
 
@@ -334,6 +339,14 @@ const PyramidMemeEmpireV5 = () => {
       // Load XP progress
       if (data.xpProgress) {
         setXpProgress(data.xpProgress);
+      }
+
+      // Load Battle Pass info
+      if (data.battlePassInfo) {
+        setBattlePassInfo(data.battlePassInfo);
+      }
+      if (data.referralStats) {
+        setReferralStats(data.referralStats);
       }
     } catch (err) {
       console.error('Load progress error:', err);
@@ -390,6 +403,7 @@ const PyramidMemeEmpireV5 = () => {
         setLevel(result.level);
         setEnergy(result.energy);
         setIsPremium(result.isPremium);
+        setHasBattlePass(result.hasBattlePass || false);
 
         // Update boost state
         setBoostMultiplier(result.boostMultiplier || 1);
@@ -406,9 +420,9 @@ const PyramidMemeEmpireV5 = () => {
           triggerLevelUp();
         }
 
-        // Update level cap based on backend response AND premium status
-        // If premium, ALWAYS clear level cap
-        if (result.isPremium) {
+        // Update level cap based on backend response AND premium/Battle Pass status
+        // If premium or Battle Pass, ALWAYS clear level cap
+        if (result.isPremium || result.hasBattlePass) {
           setIsLevelCapped(false);
         } else if (result.isLevelCapped && !isLevelCapped) {
           setIsLevelCapped(true);
@@ -749,8 +763,8 @@ const PyramidMemeEmpireV5 = () => {
       return;
     }
 
-    if (isPremium) {
-      showNotification('👑 Premium users have unlimited energy!');
+    if (isPremium || hasBattlePass) {
+      showNotification(hasBattlePass ? '🏆 Battle Pass users have unlimited energy!' : '👑 Premium users have unlimited energy!');
       setShowEnergyModal(false);
       return;
     }
@@ -812,6 +826,80 @@ const PyramidMemeEmpireV5 = () => {
       setIsPurchasing(false);
     }
   };
+
+  // ========== BATTLE PASS PURCHASE ==========
+  const handleBattlePassPurchase = async () => {
+    if (!isAuthenticated) {
+      showNotification('⚠️ Connect wallet first!');
+      return;
+    }
+
+    if (hasBattlePass) {
+      showNotification('🏆 You already have Battle Pass!');
+      setShowBattlePassModal(false);
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const result = await apiCall('/api/shop/activate', {
+        method: 'POST',
+        body: JSON.stringify({ itemId: 'battle_pass' })
+      });
+
+      if (result.success && result.hasBattlePass) {
+        setHasBattlePass(true);
+        setIsLevelCapped(false);
+        setBoostMultiplier(5); // Battle Pass gives X5 boost
+        setIsBoostActive(true);
+        setBoostType('battle_pass');
+        setBattlePassInfo({ expiresAt: result.expiresAt });
+        if (result.referralCode) {
+          setReferralCode(result.referralCode);
+        }
+        setShowBattlePassModal(false);
+        showNotification('🏆 BATTLE PASS ACTIVATED!');
+        playWhoosh();
+
+        // Trigger celebration
+        setShowFireworks(true);
+        setTimeout(() => setShowFireworks(false), 3000);
+      }
+    } catch (err) {
+      console.error('Battle Pass purchase error:', err);
+      const errorMsg = err.message || 'Purchase failed';
+      showNotification(`❌ ${errorMsg}`);
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  // Load referral stats
+  const loadReferralStats = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const data = await apiCall('/api/referrals/stats');
+      setReferralStats({
+        total: data.total || 0,
+        verified: data.verified || 0,
+        bonusPercent: data.bonusPercent || 0
+      });
+      if (data.referralCode) {
+        setReferralCode(data.referralCode);
+        const baseUrl = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
+        setReferralLink(`${baseUrl}?ref=${data.referralCode}`);
+      }
+    } catch (err) {
+      console.error('Load referral stats error:', err);
+    }
+  };
+
+  // Load referral stats when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadReferralStats();
+    }
+  }, [isAuthenticated]);
 
   // ========== SHARE ==========
   const shareOnTwitter = () => {
@@ -1565,6 +1653,154 @@ const PyramidMemeEmpireV5 = () => {
           </div>
         )}
 
+        {/* Battle Pass Purchase Modal */}
+        {showBattlePassModal && (
+          <div
+            className="boost-modal-backdrop"
+            onMouseDown={() => !isPurchasing && setShowBattlePassModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.95)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+              padding: 20,
+            }}>
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #2d1f3d)',
+                border: '3px solid #FF00FF',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 360,
+                width: '100%',
+                position: 'relative',
+                boxShadow: '0 0 60px rgba(255,0,255,0.5)',
+                textAlign: 'center',
+              }}>
+              {!isPurchasing && (
+                <button
+                  onMouseDown={() => setShowBattlePassModal(false)}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    background: 'rgba(255,255,255,0.1)',
+                    border: 'none',
+                    color: '#888',
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+
+              <div style={{ fontSize: 56, marginBottom: 12 }}>🏆</div>
+
+              <h3 style={{
+                color: '#FF00FF',
+                fontSize: 20,
+                marginBottom: 8,
+                fontFamily: 'inherit',
+                textShadow: '0 0 15px rgba(255,0,255,0.7)',
+              }}>
+                BATTLE PASS
+              </h3>
+
+              <p style={{
+                color: '#00FFFF',
+                fontSize: 10,
+                marginBottom: 16,
+                fontFamily: 'inherit',
+              }}>
+                SEASON 1 • 30 DAYS OF POWER
+              </p>
+
+              <div style={{
+                background: 'rgba(255,0,255,0.1)',
+                border: '2px solid rgba(255,0,255,0.4)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+                textAlign: 'left',
+              }}>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  ⚡ Permanent X5 Boost
+                </div>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  📈 +10% XP Bonus
+                </div>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  🏆 Leaderboard Access
+                </div>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  👥 +10% XP per Verified Referral
+                </div>
+                <div style={{ color: '#FFD700', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  🗿 Golden Pyramid Skin
+                </div>
+                <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
+                  ♾️ Unlimited Energy
+                </div>
+                <div style={{ color: '#0f0', fontSize: 10, fontFamily: 'inherit' }}>
+                  ⏱️ No Tap Cooldown
+                </div>
+              </div>
+
+              <div style={{
+                fontSize: 32,
+                color: '#FF00FF',
+                marginBottom: 16,
+                textShadow: '0 0 20px rgba(255,0,255,0.6)',
+              }}>
+                $5.00
+              </div>
+
+              <button
+                onClick={handleBattlePassPurchase}
+                disabled={isPurchasing}
+                style={{
+                  width: '100%',
+                  padding: 18,
+                  background: isPurchasing
+                    ? '#666'
+                    : 'linear-gradient(135deg, #FF00FF, #8B00FF)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  cursor: isPurchasing ? 'not-allowed' : 'pointer',
+                  boxShadow: isPurchasing ? 'none' : '0 0 40px rgba(255,0,255,0.6)',
+                }}
+              >
+                {isPurchasing ? 'ACTIVATING...' : 'GET BATTLE PASS (DEMO)'}
+              </button>
+
+              <div style={{
+                marginTop: 14,
+                fontSize: 8,
+                color: '#666',
+                fontFamily: 'inherit',
+              }}>
+                Demo mode • No real payment required
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <header className="header">
           <div className="logo">PYRAMIDMEME</div>
@@ -1645,22 +1881,24 @@ const PyramidMemeEmpireV5 = () => {
               )}
 
               {/* TAP AREA */}
-              <div 
+              <div
                 id="tap-area"
                 className="tap-area-full"
                 onClick={handleTap}
               >
-                <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''}`}>
+                <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
                   <div className="pyramid-grid">
                     {renderPyramid()}
                   </div>
-                </div>
-                
-                <div className={`level-badge ${isLevelCapped && !isPremium ? 'level-capped' : ''} ${isPremium ? 'level-premium' : ''}`}>
-                  Level {level} {isPremium && '👑'} {isLevelCapped && !isPremium && '🔒'}
+                  {hasBattlePass && <div className="golden-glow" />}
                 </div>
 
-                {isLevelCapped && !isPremium && (
+                <div className={`level-badge ${isLevelCapped && !isPremium && !hasBattlePass ? 'level-capped' : ''} ${isPremium ? 'level-premium' : ''} ${hasBattlePass ? 'level-battlepass' : ''}`}>
+                  {hasBattlePass && <span className="bp-badge-small">🏆</span>}
+                  Level {level} {isPremium && !hasBattlePass && '👑'} {isLevelCapped && !isPremium && !hasBattlePass && '🔒'}
+                </div>
+
+                {isLevelCapped && !isPremium && !hasBattlePass && (
                   <div
                     className="premium-hint"
                     onClick={() => setShowLevelCapModal(true)}
@@ -1669,8 +1907,18 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
                 )}
 
+                {hasBattlePass && (
+                  <div className="bp-boost-indicator">
+                    <span className="bp-boost-icon">🔥</span>
+                    <span className="bp-boost-text">X5 ACTIVE</span>
+                    {referralStats.bonusPercent > 0 && (
+                      <span className="bp-referral-bonus">+{referralStats.bonusPercent}% XP</span>
+                    )}
+                  </div>
+                )}
+
                 <div className="tap-hint">
-                  {isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
+                  {hasBattlePass ? 'BATTLE PASS POWER!' : isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
                 </div>
               </div>
 
@@ -1692,43 +1940,85 @@ const PyramidMemeEmpireV5 = () => {
             <div className="arena-view">
               <div className="arena-scroll">
                 <h2 className="arena-title">🏆 TAP ARENA</h2>
-                <p className="arena-subtitle">Battle for $PME - Top Tappers Win!</p>
-                
-                <div className="leaderboard">
+                <p className="arena-subtitle">
+                  {hasBattlePass ? 'Battle for $PME - Top Tappers Win!' : 'Battle Pass Required'}
+                </p>
+
+                {/* Battle Pass Badge for BP users */}
+                {hasBattlePass && (
+                  <div className="arena-bp-badge">
+                    <span className="bp-badge-icon">🏆</span>
+                    <span className="bp-badge-text">BATTLE PASS ACTIVE</span>
+                  </div>
+                )}
+
+                {/* Leaderboard - show blurred for non-BP users */}
+                <div className={`leaderboard ${!hasBattlePass ? 'leaderboard-locked' : ''}`}>
                   <div className="leaderboard-header">
                     <span>RANK</span>
                     <span>PLAYER</span>
-                    <span>TAPS</span>
-                    <span>WIN</span>
+                    <span>BRICKS</span>
+                    <span>LVL</span>
                   </div>
-                  
+
                   {leaderboard.map((player) => (
-                    <div key={player.rank} className={`leaderboard-row ${player.rank <= 3 ? 'top-three' : ''}`}>
+                    <div key={player.rank} className={`leaderboard-row ${player.rank <= 3 ? 'top-three' : ''} ${player.hasBattlePass ? 'bp-player' : ''}`}>
                       <div className="rank-cell">
                         {player.rank === 1 && '🥇'}
                         {player.rank === 2 && '🥈'}
                         {player.rank === 3 && '🥉'}
                         {player.rank > 3 && `#${player.rank}`}
                       </div>
-                      <div className="name-cell">{player.name}</div>
+                      <div className="name-cell">
+                        {player.hasBattlePass && <span className="player-bp-badge">🏆</span>}
+                        {player.name}
+                      </div>
                       <div className="taps-cell">{player.taps.toLocaleString()}</div>
                       <div className="win-cell neon-green">{player.winnings}</div>
                     </div>
                   ))}
-                  
+
                   {/* User's position (if not in top 10) */}
-                  <div className="leaderboard-divider">...</div>
-                  <div className="leaderboard-row user-row">
-                    <div className="rank-cell">#{userRank}</div>
-                    <div className="name-cell">You</div>
-                    <div className="taps-cell">{bricks}</div>
-                    <div className="win-cell">-</div>
-                  </div>
+                  {hasBattlePass && (
+                    <>
+                      <div className="leaderboard-divider">...</div>
+                      <div className="leaderboard-row user-row">
+                        <div className="rank-cell">#{userRank}</div>
+                        <div className="name-cell">
+                          <span className="player-bp-badge">🏆</span>
+                          You
+                        </div>
+                        <div className="taps-cell">{bricks}</div>
+                        <div className="win-cell">{level}L</div>
+                      </div>
+                    </>
+                  )}
                 </div>
+
+                {/* Battle Pass Required Overlay */}
+                {!hasBattlePass && (
+                  <div className="arena-locked-overlay">
+                    <div className="locked-content">
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                      <h3 style={{ color: '#FF00FF', marginBottom: 8, fontSize: 14 }}>
+                        BATTLE PASS REQUIRED
+                      </h3>
+                      <p style={{ color: '#888', fontSize: 10, marginBottom: 16 }}>
+                        Get Battle Pass to compete in the Arena and win $PME rewards!
+                      </p>
+                      <button
+                        onClick={() => setShowBattlePassModal(true)}
+                        className="arena-get-bp-btn"
+                      >
+                        GET BATTLE PASS - $5
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="arena-info">
                   <p>💰 Top 10 share 70% of weekly $PME pool</p>
-                  <p>⚡ Keep tapping to climb the ranks!</p>
+                  <p>⚡ Battle Pass holders compete for prizes!</p>
                 </div>
               </div>
             </div>
@@ -1781,12 +2071,16 @@ const PyramidMemeEmpireV5 = () => {
               <div className="shop-scroll">
                 
                 {/* Battle Pass - Featured */}
-                <div className="featured-item">
+                <div className={`featured-item ${hasBattlePass ? 'featured-item-active' : ''}`}>
                   <div className="item-header">
-                    <div className="item-icon-large">👑</div>
+                    <div className="item-icon-large">{hasBattlePass ? '🏆' : '👑'}</div>
                     <div>
                       <div className="item-title">BATTLE PASS</div>
-                      <div className="item-subtitle">SEASON 1 - UNLIMITED POWER</div>
+                      <div className="item-subtitle">
+                        {hasBattlePass
+                          ? `ACTIVE - ${battlePassInfo?.daysRemaining || 30} days left`
+                          : 'SEASON 1 - UNLIMITED POWER'}
+                      </div>
                     </div>
                     <button
                       className="info-btn"
@@ -1797,11 +2091,15 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                   </div>
                   <div className="item-price-big">
-                    <span className="price-value">$5</span>
-                    <span className="price-period">/30 DAYS</span>
+                    <span className="price-value">{hasBattlePass ? 'ACTIVE' : '$5'}</span>
+                    {!hasBattlePass && <span className="price-period">/30 DAYS</span>}
                   </div>
-                  <button className="buy-btn-featured" onClick={playWhoosh}>
-                    GET BATTLE PASS
+                  <button
+                    className={`buy-btn-featured ${hasBattlePass ? 'btn-featured-active' : ''}`}
+                    onClick={() => !hasBattlePass && setShowBattlePassModal(true)}
+                    disabled={hasBattlePass}
+                  >
+                    {hasBattlePass ? '✓ ACTIVATED' : 'GET BATTLE PASS'}
                   </button>
                 </div>
 
@@ -1834,13 +2132,13 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 {/* Boost X2 */}
-                <div className={`shop-item-row ${boostMultiplier >= 2 ? 'item-disabled' : ''}`}>
+                <div className={`shop-item-row ${(boostMultiplier >= 2 || hasBattlePass) ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">⚡</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X2</div>
                       <div className="item-brief">
-                        {boostType === 'x2' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '2X bricks for 24h'}
+                        {hasBattlePass ? 'Not needed (BP has X5)' : boostType === 'x2' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '2X bricks for 24h'}
                       </div>
                     </div>
                   </div>
@@ -1854,23 +2152,23 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                     <div className="item-price-small">$0.50</div>
                     <button
-                      className={`buy-btn-small ${boostMultiplier >= 2 ? 'btn-disabled' : ''}`}
-                      onClick={() => boostMultiplier < 2 && openBoostModal('boost_2x')}
-                      disabled={boostMultiplier >= 2}
+                      className={`buy-btn-small ${(boostMultiplier >= 2 || hasBattlePass) ? 'btn-disabled' : ''}`}
+                      onClick={() => !hasBattlePass && boostMultiplier < 2 && openBoostModal('boost_2x')}
+                      disabled={boostMultiplier >= 2 || hasBattlePass}
                     >
-                      {boostType === 'x2' ? 'ACTIVE' : boostMultiplier >= 2 ? 'BLOCKED' : 'BUY'}
+                      {hasBattlePass ? 'N/A' : boostType === 'x2' ? 'ACTIVE' : boostMultiplier >= 2 ? 'BLOCKED' : 'BUY'}
                     </button>
                   </div>
                 </div>
 
                 {/* Boost X5 */}
-                <div className={`shop-item-row ${boostMultiplier === 5 ? 'item-disabled' : ''}`}>
+                <div className={`shop-item-row ${(boostMultiplier === 5 || hasBattlePass) ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">🔥</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X5</div>
                       <div className="item-brief">
-                        {boostType === 'x5' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : boostType === 'x2' ? 'UPGRADE available!' : '5X bricks for 24h'}
+                        {hasBattlePass ? 'Included in Battle Pass!' : boostType === 'x5' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : boostType === 'x2' ? 'UPGRADE available!' : '5X bricks for 24h'}
                       </div>
                     </div>
                   </div>
@@ -1884,22 +2182,24 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                     <div className="item-price-small">$1.50</div>
                     <button
-                      className={`buy-btn-small ${boostMultiplier === 5 ? 'btn-disabled' : boostType === 'x2' ? 'btn-upgrade' : ''}`}
-                      onClick={() => boostMultiplier !== 5 && openBoostModal('boost_5x')}
-                      disabled={boostMultiplier === 5}
+                      className={`buy-btn-small ${(boostMultiplier === 5 || hasBattlePass) ? 'btn-disabled' : boostType === 'x2' ? 'btn-upgrade' : ''}`}
+                      onClick={() => !hasBattlePass && boostMultiplier !== 5 && openBoostModal('boost_5x')}
+                      disabled={boostMultiplier === 5 || hasBattlePass}
                     >
-                      {boostType === 'x5' ? 'ACTIVE' : boostType === 'x2' ? 'UPGRADE' : 'BUY'}
+                      {hasBattlePass ? 'ACTIVE' : boostType === 'x5' ? 'ACTIVE' : boostType === 'x2' ? 'UPGRADE' : 'BUY'}
                     </button>
                   </div>
                 </div>
 
                 {/* Energy Refill */}
-                <div className={`shop-item-row ${isPremium ? 'item-disabled' : ''}`}>
+                <div className={`shop-item-row ${(isPremium || hasBattlePass) ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">🔋</div>
                     <div className="item-details">
                       <div className="item-name">ENERGY REFILL</div>
-                      <div className="item-brief">{isPremium ? 'Not needed (Premium)' : 'Instant +100 energy'}</div>
+                      <div className="item-brief">
+                        {hasBattlePass ? 'Not needed (Battle Pass)' : isPremium ? 'Not needed (Premium)' : 'Instant +100 energy'}
+                      </div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -1912,11 +2212,11 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                     <div className="item-price-small">$0.25</div>
                     <button
-                      className={`buy-btn-small ${isPremium ? 'btn-disabled' : 'btn-energy'}`}
-                      onClick={() => !isPremium && setShowEnergyModal(true)}
-                      disabled={isPremium}
+                      className={`buy-btn-small ${(isPremium || hasBattlePass) ? 'btn-disabled' : 'btn-energy'}`}
+                      onClick={() => !(isPremium || hasBattlePass) && setShowEnergyModal(true)}
+                      disabled={isPremium || hasBattlePass}
                     >
-                      {isPremium ? 'N/A' : 'BUY'}
+                      {(isPremium || hasBattlePass) ? 'N/A' : 'BUY'}
                     </button>
                   </div>
                 </div>
@@ -1928,8 +2228,29 @@ const PyramidMemeEmpireV5 = () => {
           {currentTab === 'referrals' && (
             <div className="referrals-view">
               <div className="referrals-scroll">
-                <h3 className="section-title">UNLIMITED BOOSTS 🗿</h3>
-                
+                <h3 className="section-title">
+                  {hasBattlePass ? '🏆 REFERRAL BONUSES' : 'UNLIMITED BOOSTS 🗿'}
+                </h3>
+
+                {/* Battle Pass Required Notice (if no battle pass) */}
+                {!hasBattlePass && (
+                  <div className="bp-required-notice">
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>🔒</div>
+                    <p style={{ color: '#FF00FF', fontSize: 10, marginBottom: 8 }}>
+                      Battle Pass Required for Referral Bonuses
+                    </p>
+                    <p style={{ color: '#888', fontSize: 9, marginBottom: 12 }}>
+                      Get +10% XP bonus per verified referral!
+                    </p>
+                    <button
+                      onClick={() => setShowBattlePassModal(true)}
+                      className="get-bp-btn"
+                    >
+                      GET BATTLE PASS - $5
+                    </button>
+                  </div>
+                )}
+
                 <div className="referral-card">
                   <div className="referral-label">YOUR LINK</div>
                   <div className="referral-link-box">
@@ -1941,6 +2262,7 @@ const PyramidMemeEmpireV5 = () => {
                       COPY
                     </button>
                     <button onClick={shareOnTwitter} disabled={!referralLink} className="action-btn action-btn-x">
+                      <Share2 size={14} />
                       SHARE X
                     </button>
                     <button onClick={shareOnTelegram} disabled={!referralLink} className="action-btn action-btn-tg">
@@ -1951,24 +2273,36 @@ const PyramidMemeEmpireV5 = () => {
 
                 <div className="referral-stats">
                   <div className="ref-stat">
-                    <div className="ref-stat-value">0</div>
+                    <div className="ref-stat-value">{referralStats.total}</div>
                     <div className="ref-stat-label">INVITED</div>
                   </div>
                   <div className="ref-stat">
-                    <div className="ref-stat-value neon-green">0</div>
-                    <div className="ref-stat-label">ACTIVE</div>
+                    <div className="ref-stat-value neon-green">{referralStats.verified}</div>
+                    <div className="ref-stat-label">VERIFIED</div>
                   </div>
                   <div className="ref-stat">
-                    <div className="ref-stat-value neon-purple">+0%</div>
-                    <div className="ref-stat-label">BOOST</div>
+                    <div className={`ref-stat-value ${hasBattlePass ? 'neon-purple' : ''}`}>
+                      {hasBattlePass ? `+${referralStats.bonusPercent}%` : '🔒'}
+                    </div>
+                    <div className="ref-stat-label">XP BOOST</div>
                   </div>
                 </div>
 
                 <div className="referral-info-box">
                   <p className="info-text">
-                    +10% boost per referral who activates premium. Unlimited potential!
+                    {hasBattlePass
+                      ? `🔥 You get +${referralStats.bonusPercent}% XP from ${referralStats.verified} verified referrals!`
+                      : 'Get Battle Pass to earn +10% XP per referral who purchases Battle Pass or Premium!'}
                   </p>
                 </div>
+
+                {/* Referral Code Display */}
+                {referralCode && (
+                  <div className="referral-code-box">
+                    <div className="code-label">YOUR CODE</div>
+                    <div className="code-value">{referralCode}</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2556,9 +2890,83 @@ const PyramidMemeEmpireV5 = () => {
           animation: pulse-premium 2s ease-in-out infinite;
         }
 
+        .level-badge.level-battlepass {
+          background: linear-gradient(135deg, #FF00FF, #8B00FF);
+          border-color: #FF00FF;
+          animation: pulse-battlepass 2s ease-in-out infinite;
+        }
+
+        .bp-badge-small {
+          margin-right: 4px;
+          font-size: 10px;
+        }
+
         @keyframes pulse-premium {
           0%, 100% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); }
           50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.7); }
+        }
+
+        @keyframes pulse-battlepass {
+          0%, 100% { box-shadow: 0 0 20px rgba(255, 0, 255, 0.5); }
+          50% { box-shadow: 0 0 35px rgba(255, 0, 255, 0.8); }
+        }
+
+        /* GOLDEN PYRAMID - BATTLE PASS */
+        .pyramid-container.pyramid-golden {
+          filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.6));
+        }
+
+        .pyramid-container.pyramid-golden .pyramid-moai {
+          filter: brightness(1.3) drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+        }
+
+        .golden-glow {
+          position: absolute;
+          inset: -20px;
+          background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, transparent 70%);
+          pointer-events: none;
+          animation: golden-pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes golden-pulse {
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.05); }
+        }
+
+        /* Battle Pass Boost Indicator */
+        .bp-boost-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 10px;
+          padding: 8px 16px;
+          background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(139, 0, 255, 0.2));
+          border: 1.5px solid #FF00FF;
+          border-radius: 12px;
+          animation: bp-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes bp-glow {
+          0%, 100% { box-shadow: 0 0 15px rgba(255, 0, 255, 0.4); }
+          50% { box-shadow: 0 0 25px rgba(255, 0, 255, 0.7); }
+        }
+
+        .bp-boost-icon {
+          font-size: 14px;
+        }
+
+        .bp-boost-text {
+          color: #FF00FF;
+          font-size: 10px;
+          font-weight: bold;
+        }
+
+        .bp-referral-bonus {
+          color: #00FF00;
+          font-size: 9px;
+          padding-left: 8px;
+          border-left: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         @keyframes pulse-gold {
@@ -2759,6 +3167,91 @@ const PyramidMemeEmpireV5 = () => {
           margin: 6px 0;
         }
 
+        /* ARENA BATTLE PASS FEATURES */
+        .arena-bp-badge {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 16px;
+          padding: 10px 16px;
+          background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(139, 0, 255, 0.2));
+          border: 2px solid #FF00FF;
+          border-radius: 12px;
+          animation: arena-bp-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes arena-bp-pulse {
+          0%, 100% { box-shadow: 0 0 15px rgba(255, 0, 255, 0.4); }
+          50% { box-shadow: 0 0 30px rgba(255, 0, 255, 0.7); }
+        }
+
+        .bp-badge-icon {
+          font-size: 18px;
+        }
+
+        .bp-badge-text {
+          color: #FF00FF;
+          font-size: 10px;
+          font-weight: bold;
+        }
+
+        .leaderboard.leaderboard-locked {
+          filter: blur(4px);
+          opacity: 0.5;
+          pointer-events: none;
+        }
+
+        .arena-locked-overlay {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          z-index: 10;
+          text-align: center;
+          padding: 24px;
+        }
+
+        .locked-content {
+          background: rgba(26, 26, 46, 0.95);
+          border: 2px solid #FF00FF;
+          border-radius: 16px;
+          padding: 24px;
+          box-shadow: 0 0 40px rgba(255, 0, 255, 0.5);
+        }
+
+        .arena-get-bp-btn {
+          padding: 14px 24px;
+          background: linear-gradient(135deg, #FF00FF, #8B00FF);
+          border: none;
+          border-radius: 10px;
+          color: #fff;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+          transition: all 0.3s;
+        }
+
+        .arena-get-bp-btn:hover {
+          transform: scale(1.05);
+          box-shadow: 0 0 30px rgba(255, 0, 255, 0.7);
+        }
+
+        .player-bp-badge {
+          margin-right: 4px;
+          font-size: 10px;
+        }
+
+        .bp-player {
+          background: linear-gradient(90deg, rgba(255, 0, 255, 0.1), transparent);
+        }
+
+        .arena-scroll {
+          position: relative;
+        }
+
         /* QUESTS VIEW */
         .quests-list {
           margin-bottom: 20px;
@@ -2948,6 +3441,23 @@ const PyramidMemeEmpireV5 = () => {
 
         .buy-btn-featured:active {
           transform: scale(0.97);
+        }
+
+        .buy-btn-featured.btn-featured-active {
+          background: linear-gradient(135deg, #4CAF50, #45a049);
+          box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+          cursor: default;
+        }
+
+        .featured-item.featured-item-active {
+          background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(0, 255, 0, 0.1));
+          border-image: linear-gradient(135deg, #4CAF50, #00FF00) 1;
+          box-shadow: 0 0 30px rgba(76, 175, 80, 0.4);
+        }
+
+        .featured-item.featured-item-active .price-value {
+          color: #4CAF50;
+          text-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
         }
 
         .shop-item-row {
@@ -3211,6 +3721,57 @@ const PyramidMemeEmpireV5 = () => {
           color: #00FF00;
           line-height: 1.6;
           text-align: center;
+        }
+
+        /* REFERRALS - BATTLE PASS FEATURES */
+        .bp-required-notice {
+          background: linear-gradient(135deg, rgba(255, 0, 255, 0.1), rgba(139, 0, 255, 0.1));
+          border: 2px solid rgba(255, 0, 255, 0.5);
+          border-radius: 12px;
+          padding: 20px;
+          margin-bottom: 18px;
+          text-align: center;
+        }
+
+        .get-bp-btn {
+          padding: 12px 20px;
+          background: linear-gradient(135deg, #FF00FF, #8B00FF);
+          border: none;
+          border-radius: 10px;
+          color: #fff;
+          font-family: inherit;
+          font-size: 10px;
+          font-weight: bold;
+          cursor: pointer;
+          box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+          transition: all 0.3s;
+        }
+
+        .get-bp-btn:hover {
+          transform: scale(1.05);
+          box-shadow: 0 0 30px rgba(255, 0, 255, 0.7);
+        }
+
+        .referral-code-box {
+          background: rgba(20, 20, 20, 0.8);
+          border: 2px solid #FFD700;
+          border-radius: 10px;
+          padding: 14px;
+          margin-top: 18px;
+          text-align: center;
+        }
+
+        .code-label {
+          font-size: 8px;
+          color: #888;
+          margin-bottom: 8px;
+        }
+
+        .code-value {
+          font-size: 18px;
+          color: #FFD700;
+          font-weight: bold;
+          letter-spacing: 2px;
         }
 
         /* BOTTOM NAV - 5 tabs */

@@ -19,12 +19,14 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Check premium status
+    // Check premium and battle pass status
     const isPremium = await User.checkPremium(user.id);
+    const hasBattlePass = await User.checkBattlePass(user.id);
 
     req.user = {
       ...user,
-      isPremium
+      isPremium,
+      hasBattlePass
     };
 
     next();

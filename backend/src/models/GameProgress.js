@@ -51,7 +51,9 @@ class GameProgress {
   }
 
   // Process a tap
-  static async processTap(userId, isPremium = false, sessionId = null, ipAddress = null) {
+  // hasBattlePass: grants X5 boost, +10% XP, no cooldown, no energy use
+  // referralBonusMultiplier: 1.0 base + 0.1 per verified referral (e.g., 1.3 = +30%)
+  static async processTap(userId, isPremium = false, hasBattlePass = false, referralBonusMultiplier = 1, sessionId = null, ipAddress = null) {
     const progress = await this.findByUserId(userId);
 
     if (!progress) {
@@ -61,23 +63,29 @@ class GameProgress {
     const now = new Date();
     const lastTap = progress.last_tap_at ? new Date(progress.last_tap_at) : null;
 
-    // Check cooldown (2 seconds for non-premium)
-    if (!isPremium && lastTap) {
+    // Battle Pass and Premium users have no cooldown
+    const hasNoCooldown = isPremium || hasBattlePass;
+
+    // Check cooldown (2 seconds for free users)
+    if (!hasNoCooldown && lastTap) {
       const timeSinceLastTap = now - lastTap;
       if (timeSinceLastTap < 2000) {
         throw new Error('Tap cooldown active');
       }
     }
 
-    // Check energy (non-premium only)
-    if (!isPremium && progress.energy <= 0) {
+    // Battle Pass and Premium users have unlimited energy
+    const hasUnlimitedEnergy = isPremium || hasBattlePass;
+
+    // Check energy (free users only)
+    if (!hasUnlimitedEnergy && progress.energy <= 0) {
       throw new Error('No energy left');
     }
 
-    // Calculate multiplier
-    let multiplier = parseFloat(progress.boost_multiplier) || 1;
+    // Calculate boost multiplier
+    let boostMultiplier = parseFloat(progress.boost_multiplier) || 1;
     if (progress.boost_expires_at && new Date(progress.boost_expires_at) < now) {
-      multiplier = 1;
+      boostMultiplier = 1;
       // Reset boost if expired
       await db.query(
         `UPDATE game_progress SET boost_multiplier = 1, boost_type = NULL WHERE user_id = $1`,
@@ -85,10 +93,25 @@ class GameProgress {
       );
     }
 
-    const bricksEarned = Math.floor(1 * multiplier);
-    const energyUsed = isPremium ? 0 : 1;
+    // Battle Pass grants permanent X5 boost (if no better boost active)
+    if (hasBattlePass && boostMultiplier < 5) {
+      boostMultiplier = 5;
+    }
+
+    // Calculate XP/Bricks earned
+    // Base: 1 brick * boost multiplier
+    let baseXP = 1 * boostMultiplier;
+
+    // Battle Pass: +10% XP bonus (1.1x)
+    const battlePassBonus = hasBattlePass ? 1.1 : 1;
+
+    // Referral bonus: +10% per verified referral
+    const totalMultiplier = baseXP * battlePassBonus * referralBonusMultiplier;
+    const bricksEarned = Math.floor(totalMultiplier);
+
+    const energyUsed = hasUnlimitedEnergy ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;
-    const newEnergy = isPremium ? progress.energy : Math.max(0, progress.energy - 1);
+    const newEnergy = hasUnlimitedEnergy ? progress.energy : Math.max(0, progress.energy - 1);
 
     // Calculate level using exponential formula
     const calculatedLevel = calculateLevelFromXp(newBricks);
@@ -114,14 +137,14 @@ class GameProgress {
            updated_at = NOW()
        WHERE user_id = $6
        RETURNING *`,
-      [newBricks, newLevel, newEnergy, bricksEarned, multiplier, userId]
+      [newBricks, newLevel, newEnergy, bricksEarned, boostMultiplier, userId]
     );
 
     // Log tap to taps table for analytics
     await db.query(
       `INSERT INTO taps (user_id, bricks_earned, multiplier, energy_used, session_id, ip_address)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [userId, bricksEarned, multiplier, energyUsed, sessionId, ipAddress]
+      [userId, bricksEarned, boostMultiplier, energyUsed, sessionId, ipAddress]
     );
 
     const updated = result.rows[0];

@@ -31,6 +31,14 @@ router.get('/progress', async (req, res) => {
     // Calculate XP progress for current level
     const xpProgress = getXpProgress(progress.bricks, progress.level);
 
+    // Get Battle Pass info and referral stats
+    const battlePassInfo = req.user.hasBattlePass ? await User.getBattlePassInfo(req.user.id) : null;
+    const referralStats = req.user.hasBattlePass ? await User.getVerifiedReferralStats(req.user.id) : null;
+
+    // Battle Pass users always have X5 boost
+    const effectiveMultiplier = req.user.hasBattlePass ? 5 : activeMultiplier;
+    const effectiveBoostType = req.user.hasBattlePass ? 'battle_pass' : (isBoostActive ? progress.boost_type : null);
+
     res.json({
       bricks: progress.bricks,
       level: progress.level,
@@ -38,12 +46,15 @@ router.get('/progress', async (req, res) => {
       energy: progress.energy,
       maxEnergy: progress.max_energy || 100,
       totalTaps: progress.total_taps,
-      boostMultiplier: activeMultiplier,
-      boostExpiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
-      boostType: isBoostActive ? progress.boost_type : null,
-      isBoostActive,
+      boostMultiplier: effectiveMultiplier,
+      boostExpiresAt: req.user.hasBattlePass ? null : (isBoostActive ? boostExpiresAt.toISOString() : null),
+      boostType: effectiveBoostType,
+      isBoostActive: isBoostActive || req.user.hasBattlePass,
       rank,
       isPremium: req.user.isPremium,
+      hasBattlePass: req.user.hasBattlePass,
+      battlePassInfo,
+      referralStats,
       isLevelCapped,
       maxFreeLevel: FREE_USER_MAX_LEVEL,
       xpProgress
@@ -60,17 +71,30 @@ router.post('/tap', tapRateLimit, async (req, res) => {
     // Get IP address for analytics
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || null;
 
+    // Get referral bonus multiplier for Battle Pass users
+    let referralBonusMultiplier = 1;
+    if (req.user.hasBattlePass) {
+      const referralStats = await User.getVerifiedReferralStats(req.user.id);
+      referralBonusMultiplier = referralStats.bonusMultiplier;
+    }
+
     const result = await GameProgress.processTap(
       req.user.id,
       req.user.isPremium,
+      req.user.hasBattlePass,
+      referralBonusMultiplier,
       null, // sessionId - can be implemented later
       ipAddress
     );
 
-    // Check if boost is still active
+    // Check if boost is still active (or Battle Pass permanent X5)
     const now = new Date();
     const boostExpiresAt = result.boost_expires_at ? new Date(result.boost_expires_at) : null;
     const isBoostActive = boostExpiresAt && boostExpiresAt > now;
+
+    // Battle Pass users always have X5 active
+    const effectiveBoostMultiplier = req.user.hasBattlePass ? 5 : (isBoostActive ? parseFloat(result.boost_multiplier) : 1);
+    const effectiveBoostType = req.user.hasBattlePass ? 'battle_pass' : (isBoostActive ? result.boost_type : null);
 
     res.json({
       success: true,
@@ -84,11 +108,13 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       isLevelCapped: result.isLevelCapped,
       maxFreeLevel: result.maxFreeLevel,
       isPremium: req.user.isPremium,
-      boostMultiplier: isBoostActive ? parseFloat(result.boost_multiplier) : 1,
-      boostExpiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
-      boostType: isBoostActive ? result.boost_type : null,
-      isBoostActive,
-      xpProgress: result.xpProgress
+      hasBattlePass: req.user.hasBattlePass,
+      boostMultiplier: effectiveBoostMultiplier,
+      boostExpiresAt: req.user.hasBattlePass ? null : (isBoostActive ? boostExpiresAt.toISOString() : null),
+      boostType: effectiveBoostType,
+      isBoostActive: isBoostActive || req.user.hasBattlePass,
+      xpProgress: result.xpProgress,
+      referralBonusMultiplier: req.user.hasBattlePass ? referralBonusMultiplier : 1
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {

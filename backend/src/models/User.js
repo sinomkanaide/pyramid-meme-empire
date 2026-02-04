@@ -118,6 +118,7 @@ class User {
         u.wallet_address,
         u.username,
         u.is_premium,
+        u.has_battle_pass,
         gp.bricks,
         gp.level
        FROM users u
@@ -127,6 +128,118 @@ class User {
       [limit]
     );
     return result.rows;
+  }
+
+  // ========== BATTLE PASS METHODS ==========
+
+  // Activate Battle Pass (30 days)
+  static async setBattlePass(userId) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    const result = await db.query(
+      `UPDATE users
+       SET has_battle_pass = TRUE,
+           battle_pass_expires_at = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [expiresAt, userId]
+    );
+    return result.rows[0];
+  }
+
+  // Check if Battle Pass is active
+  static async checkBattlePass(userId) {
+    const result = await db.query(
+      `SELECT has_battle_pass, battle_pass_expires_at FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = result.rows[0];
+
+    if (!user || !user.has_battle_pass) return false;
+    if (!user.battle_pass_expires_at) return false;
+
+    return new Date(user.battle_pass_expires_at) > new Date();
+  }
+
+  // Get Battle Pass info
+  static async getBattlePassInfo(userId) {
+    const result = await db.query(
+      `SELECT has_battle_pass, battle_pass_expires_at, referral_code FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = result.rows[0];
+
+    if (!user) return null;
+
+    const isActive = user.has_battle_pass &&
+      user.battle_pass_expires_at &&
+      new Date(user.battle_pass_expires_at) > new Date();
+
+    return {
+      hasBattlePass: user.has_battle_pass,
+      isActive,
+      expiresAt: user.battle_pass_expires_at,
+      referralCode: user.referral_code,
+      daysRemaining: isActive
+        ? Math.ceil((new Date(user.battle_pass_expires_at) - new Date()) / (1000 * 60 * 60 * 24))
+        : 0
+    };
+  }
+
+  // Get verified referral count and bonus
+  static async getVerifiedReferralStats(userId) {
+    const result = await db.query(
+      `SELECT
+        COUNT(*) as total_referrals,
+        COUNT(CASE WHEN is_activated THEN 1 END) as verified_referrals
+       FROM referrals
+       WHERE referrer_id = $1`,
+      [userId]
+    );
+
+    const stats = result.rows[0];
+    const verified = parseInt(stats.verified_referrals) || 0;
+
+    return {
+      total: parseInt(stats.total_referrals) || 0,
+      verified,
+      bonusPercent: verified * 10, // 10% per verified referral
+      bonusMultiplier: 1 + (verified * 0.1) // 1.1, 1.2, 1.3, etc.
+    };
+  }
+
+  // Mark referral as verified (when referred user makes Premium+ purchase)
+  static async verifyReferral(referredUserId, activationType) {
+    const result = await db.query(
+      `UPDATE referrals
+       SET is_activated = TRUE,
+           activation_type = $1,
+           activated_at = NOW()
+       WHERE referred_id = $2 AND is_activated = FALSE
+       RETURNING *`,
+      [activationType, referredUserId]
+    );
+    return result.rows[0];
+  }
+
+  // Get user's referral code
+  static async getReferralCode(userId) {
+    const result = await db.query(
+      `SELECT referral_code FROM users WHERE id = $1`,
+      [userId]
+    );
+    return result.rows[0]?.referral_code;
+  }
+
+  // Get referrer ID for a user
+  static async getReferrerId(userId) {
+    const result = await db.query(
+      `SELECT referred_by FROM users WHERE id = $1`,
+      [userId]
+    );
+    return result.rows[0]?.referred_by;
   }
 }
 

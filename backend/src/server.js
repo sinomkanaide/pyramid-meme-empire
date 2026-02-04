@@ -6,6 +6,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const gameRoutes = require('./routes/game');
 const shopRoutes = require('./routes/shop');
+const referralsRoutes = require('./routes/referrals');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,6 +44,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/shop', shopRoutes);
+app.use('/api/referrals', referralsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -78,6 +80,9 @@ app.listen(PORT, () => {
 ║   - GET  /api/game/leaderboard                    ║
 ║   - GET  /api/shop/items                          ║
 ║   - POST /api/shop/purchase                       ║
+║   - GET  /api/referrals/stats                     ║
+║   - GET  /api/referrals/list                      ║
+║   - GET  /api/referrals/code                      ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   `);
