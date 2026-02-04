@@ -567,9 +567,21 @@ const PyramidMemeEmpireV5 = () => {
     playWhoosh();
   };
 
-  // ========== TOOLTIP HANDLER ==========
-  const handleTooltipToggle = useCallback((tooltipId) => {
-    setActiveTooltip(prev => prev === tooltipId ? null : tooltipId);
+  // ========== TOOLTIP HANDLERS ==========
+  const openTooltip = useCallback((tooltipId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setActiveTooltip(tooltipId);
+  }, []);
+
+  const closeTooltip = useCallback((e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setActiveTooltip(null);
   }, []);
 
   // ========== PYRAMID ==========
@@ -664,12 +676,8 @@ const PyramidMemeEmpireV5 = () => {
         {/* Simple Modal Tooltip */}
         {activeTooltip && TOOLTIP_DATA[activeTooltip] && (
           <div
-            id="tooltip-backdrop"
-            onClick={(e) => {
-              if (e.target.id === 'tooltip-backdrop') {
-                setActiveTooltip(null);
-              }
-            }}
+            className="tooltip-backdrop-fixed"
+            onMouseDown={closeTooltip}
             style={{
               position: 'fixed',
               top: 0,
@@ -684,18 +692,22 @@ const PyramidMemeEmpireV5 = () => {
               padding: 20,
             }}
           >
-            <div style={{
-              background: '#1a1a2e',
-              border: '2px solid #FF00FF',
-              borderRadius: 16,
-              padding: 24,
-              maxWidth: 320,
-              width: '100%',
-              position: 'relative',
-              boxShadow: '0 0 30px rgba(255,0,255,0.5)',
-            }}>
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: '#1a1a2e',
+                border: '2px solid #FF00FF',
+                borderRadius: 16,
+                padding: 24,
+                maxWidth: 320,
+                width: '100%',
+                position: 'relative',
+                boxShadow: '0 0 30px rgba(255,0,255,0.5)',
+              }}>
               <button
-                onClick={() => setActiveTooltip(null)}
+                onMouseDown={closeTooltip}
+                onClick={closeTooltip}
                 style={{
                   position: 'absolute',
                   top: 10,
@@ -703,18 +715,18 @@ const PyramidMemeEmpireV5 = () => {
                   background: '#FF00FF',
                   border: 'none',
                   borderRadius: '50%',
-                  width: 30,
-                  height: 30,
+                  width: 36,
+                  height: 36,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#000',
                   fontWeight: 'bold',
-                  fontSize: 16,
+                  fontSize: 18,
                 }}
               >
-                X
+                ✕
               </button>
               <h3 style={{
                 color: '#FF00FF',
@@ -949,7 +961,8 @@ const PyramidMemeEmpireV5 = () => {
                     </div>
                     <button
                       className="info-btn"
-                      onClick={() => handleTooltipToggle('battlepass')}
+                      onMouseDown={(e) => openTooltip('battlepass', e)}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Info size={18} />
                     </button>
@@ -975,7 +988,8 @@ const PyramidMemeEmpireV5 = () => {
                   <div className="item-right">
                     <button
                       className="info-btn-small"
-                      onClick={() => handleTooltipToggle('premium')}
+                      onMouseDown={(e) => openTooltip('premium', e)}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Info size={16} />
                     </button>
@@ -996,7 +1010,8 @@ const PyramidMemeEmpireV5 = () => {
                   <div className="item-right">
                     <button
                       className="info-btn-small"
-                      onClick={() => handleTooltipToggle('boostx2')}
+                      onMouseDown={(e) => openTooltip('boostx2', e)}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Info size={16} />
                     </button>
@@ -1017,7 +1032,8 @@ const PyramidMemeEmpireV5 = () => {
                   <div className="item-right">
                     <button
                       className="info-btn-small"
-                      onClick={() => handleTooltipToggle('boostx5')}
+                      onMouseDown={(e) => openTooltip('boostx5', e)}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Info size={16} />
                     </button>
@@ -1038,7 +1054,8 @@ const PyramidMemeEmpireV5 = () => {
                   <div className="item-right">
                     <button
                       className="info-btn-small"
-                      onClick={() => handleTooltipToggle('energy')}
+                      onMouseDown={(e) => openTooltip('energy', e)}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Info size={16} />
                     </button>
@@ -2026,8 +2043,8 @@ const PyramidMemeEmpireV5 = () => {
         }
 
         .info-btn-small {
-          background: #00FF00;
-          border: 2px solid #00FF00;
+          background: rgba(0, 255, 255, 0.2);
+          border: 1.5px solid #00FFFF;
           border-radius: 50%;
           width: 28px;
           height: 28px;
@@ -2035,14 +2052,13 @@ const PyramidMemeEmpireV5 = () => {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #000000;
+          color: #00FFFF;
           transition: all 0.3s;
           flex-shrink: 0;
-          font-weight: bold;
         }
 
         .info-btn-small:hover {
-          background: #FFFF00;
+          background: rgba(0, 255, 255, 0.4);
           transform: scale(1.1);
         }
 
