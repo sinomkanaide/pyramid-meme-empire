@@ -2026,8 +2026,8 @@ const PyramidMemeEmpireV5 = () => {
         }
 
         .info-btn-small {
-          background: rgba(0, 255, 255, 0.2);
-          border: 1.5px solid #00FFFF;
+          background: #00FF00;
+          border: 2px solid #00FF00;
           border-radius: 50%;
           width: 28px;
           height: 28px;
@@ -2035,13 +2035,14 @@ const PyramidMemeEmpireV5 = () => {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #00FFFF;
+          color: #000000;
           transition: all 0.3s;
           flex-shrink: 0;
+          font-weight: bold;
         }
 
         .info-btn-small:hover {
-          background: rgba(0, 255, 255, 0.4);
+          background: #FFFF00;
           transform: scale(1.1);
         }
 
