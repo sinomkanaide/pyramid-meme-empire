@@ -172,22 +172,32 @@ router.post('/activate',
         itemId
       );
 
+      // Get user and progress info for validations
+      const user = await User.findById(req.user.id);
+      const progress = await GameProgress.findByUserId(req.user.id);
+
       let result = {};
       let boostInfo = null;
 
       switch (item.type) {
         case 'subscription':
-          await User.setPremium(req.user.id, item.duration);
+          // Check if already premium
+          if (user.is_premium) {
+            return res.status(400).json({
+              error: 'You already have Premium!',
+              isPremium: true
+            });
+          }
+
+          await User.setPremium(req.user.id);
           result = {
-            message: 'Premium activated!',
-            duration: item.duration,
-            type: 'premium'
+            message: 'Premium activated forever!',
+            type: 'premium',
+            isPremium: true
           };
           break;
 
         case 'boost':
-          // Get current boost status
-          const progress = await GameProgress.findByUserId(req.user.id);
           const now = new Date();
           const currentBoostActive = progress.boost_expires_at && new Date(progress.boost_expires_at) > now;
           const currentMultiplier = currentBoostActive ? parseFloat(progress.boost_multiplier) : 1;
@@ -230,8 +240,20 @@ router.post('/activate',
 
         case 'consumable':
           if (itemId === 'energy_refill') {
-            await GameProgress.regenerateEnergy(req.user.id, 100);
-            result = { message: 'Energy refilled to 100!', type: 'energy' };
+            // Check if user is premium (premium users have unlimited energy)
+            if (user.is_premium) {
+              return res.status(400).json({
+                error: 'Premium users have unlimited energy!',
+                isPremium: true
+              });
+            }
+
+            const newEnergy = await GameProgress.regenerateEnergy(req.user.id, 100);
+            result = {
+              message: 'Energy refilled to 100!',
+              type: 'energy',
+              energy: newEnergy
+            };
           }
           break;
       }

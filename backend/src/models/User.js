@@ -64,17 +64,14 @@ class User {
     return user;
   }
 
-  // Update premium status
-  static async setPremium(userId, durationDays = 30) {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + durationDays);
-
+  // Update premium status (permanent - no expiration)
+  static async setPremium(userId) {
     const result = await db.query(
       `UPDATE users
-       SET is_premium = TRUE, premium_expires_at = $1, updated_at = NOW()
-       WHERE id = $2
+       SET is_premium = TRUE, premium_expires_at = NULL, updated_at = NOW()
+       WHERE id = $1
        RETURNING *`,
-      [expiresAt, userId]
+      [userId]
     );
     return result.rows[0];
   }

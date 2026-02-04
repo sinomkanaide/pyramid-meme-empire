@@ -90,6 +90,8 @@ const PyramidMemeEmpireV5 = () => {
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [selectedBoost, setSelectedBoost] = useState(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [showEnergyModal, setShowEnergyModal] = useState(false);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -677,6 +679,76 @@ const PyramidMemeEmpireV5 = () => {
     setShowBoostModal(true);
   };
 
+  // ========== ENERGY REFILL PURCHASE ==========
+  const handleEnergyPurchase = async () => {
+    if (!isAuthenticated) {
+      showNotification('⚠️ Connect wallet first!');
+      return;
+    }
+
+    if (isPremium) {
+      showNotification('👑 Premium users have unlimited energy!');
+      setShowEnergyModal(false);
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const result = await apiCall('/api/shop/activate', {
+        method: 'POST',
+        body: JSON.stringify({ itemId: 'energy_refill' })
+      });
+
+      if (result.success) {
+        setEnergy(result.energy || 100);
+        setShowEnergyModal(false);
+        showNotification('⚡ +100 Energy!');
+        playWhoosh();
+      }
+    } catch (err) {
+      console.error('Energy purchase error:', err);
+      const errorMsg = err.message || 'Purchase failed';
+      showNotification(`❌ ${errorMsg}`);
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  // ========== PREMIUM PURCHASE ==========
+  const handlePremiumPurchase = async () => {
+    if (!isAuthenticated) {
+      showNotification('⚠️ Connect wallet first!');
+      return;
+    }
+
+    if (isPremium) {
+      showNotification('👑 You already have Premium!');
+      setShowPremiumModal(false);
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      const result = await apiCall('/api/shop/activate', {
+        method: 'POST',
+        body: JSON.stringify({ itemId: 'premium' })
+      });
+
+      if (result.success && result.isPremium) {
+        setIsPremium(true);
+        setShowPremiumModal(false);
+        showNotification('👑 Premium Activated! Unlimited Power!');
+        playWhoosh();
+      }
+    } catch (err) {
+      console.error('Premium purchase error:', err);
+      const errorMsg = err.message || 'Purchase failed';
+      showNotification(`❌ ${errorMsg}`);
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
   // ========== SHARE ==========
   const shareOnTwitter = () => {
     const text = encodeURIComponent(`Building my 🗿 PyramidMeme Empire! Join me for eternal boosts 🚀`);
@@ -1157,6 +1229,278 @@ const PyramidMemeEmpireV5 = () => {
           </div>
         )}
 
+        {/* Energy Refill Modal */}
+        {showEnergyModal && (
+          <div
+            className="boost-modal-backdrop"
+            onMouseDown={() => !isPurchasing && setShowEnergyModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+              padding: 20,
+            }}>
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #1f3d1f)',
+                border: '3px solid #00FF00',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 340,
+                width: '100%',
+                position: 'relative',
+                boxShadow: '0 0 50px rgba(0,255,0,0.4)',
+                textAlign: 'center',
+              }}>
+              {!isPurchasing && (
+                <button
+                  onMouseDown={() => setShowEnergyModal(false)}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    background: 'rgba(255,255,255,0.1)',
+                    border: 'none',
+                    color: '#888',
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🔋</div>
+
+              <h3 style={{
+                color: '#00FF00',
+                fontSize: 18,
+                marginBottom: 8,
+                fontFamily: 'inherit',
+                textShadow: '0 0 10px rgba(0,255,0,0.5)',
+              }}>
+                ENERGY REFILL
+              </h3>
+
+              <p style={{
+                color: '#aaa',
+                fontSize: 11,
+                marginBottom: 20,
+                lineHeight: 1.6,
+                fontFamily: 'inherit',
+              }}>
+                Instantly refill your energy to 100!
+              </p>
+
+              <div style={{
+                background: 'rgba(0,255,0,0.1)',
+                border: '2px solid rgba(0,255,0,0.3)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+              }}>
+                <div style={{ color: '#0f0', fontSize: 9, marginBottom: 8, fontFamily: 'inherit' }}>
+                  +100 energy instantly
+                </div>
+                <div style={{ color: '#888', fontSize: 8, fontFamily: 'inherit' }}>
+                  Current: {energy}/100
+                </div>
+              </div>
+
+              <div style={{
+                fontSize: 28,
+                color: '#0f0',
+                marginBottom: 16,
+                textShadow: '0 0 15px rgba(0,255,0,0.5)',
+              }}>
+                $0.25
+              </div>
+
+              <button
+                onClick={handleEnergyPurchase}
+                disabled={isPurchasing}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  background: isPurchasing
+                    ? '#666'
+                    : 'linear-gradient(135deg, #00FF00, #00CC00)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  color: isPurchasing ? '#999' : '#000',
+                  fontWeight: 'bold',
+                  cursor: isPurchasing ? 'not-allowed' : 'pointer',
+                  boxShadow: isPurchasing ? 'none' : '0 0 30px rgba(0,255,0,0.5)',
+                }}
+              >
+                {isPurchasing ? 'REFILLING...' : 'REFILL ENERGY (DEMO)'}
+              </button>
+
+              <div style={{
+                marginTop: 12,
+                fontSize: 8,
+                color: '#666',
+                fontFamily: 'inherit',
+              }}>
+                Demo mode • No real payment required
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Premium Modal */}
+        {showPremiumModal && (
+          <div
+            className="boost-modal-backdrop"
+            onMouseDown={() => !isPurchasing && setShowPremiumModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+              padding: 20,
+            }}>
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #3d3d1f)',
+                border: '3px solid #FFD700',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 340,
+                width: '100%',
+                position: 'relative',
+                boxShadow: '0 0 50px rgba(255,215,0,0.4)',
+                textAlign: 'center',
+              }}>
+              {!isPurchasing && (
+                <button
+                  onMouseDown={() => setShowPremiumModal(false)}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    background: 'rgba(255,255,255,0.1)',
+                    border: 'none',
+                    color: '#888',
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+
+              <div style={{ fontSize: 48, marginBottom: 16 }}>👑</div>
+
+              <h3 style={{
+                color: '#FFD700',
+                fontSize: 18,
+                marginBottom: 8,
+                fontFamily: 'inherit',
+                textShadow: '0 0 10px rgba(255,215,0,0.5)',
+              }}>
+                PREMIUM FOREVER
+              </h3>
+
+              <p style={{
+                color: '#aaa',
+                fontSize: 11,
+                marginBottom: 20,
+                lineHeight: 1.6,
+                fontFamily: 'inherit',
+              }}>
+                Unlock unlimited power permanently!
+              </p>
+
+              <div style={{
+                background: 'rgba(255,215,0,0.1)',
+                border: '2px solid rgba(255,215,0,0.3)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+              }}>
+                <div style={{ color: '#FFD700', fontSize: 9, marginBottom: 4, fontFamily: 'inherit' }}>
+                  ✓ Unlimited energy
+                </div>
+                <div style={{ color: '#FFD700', fontSize: 9, marginBottom: 4, fontFamily: 'inherit' }}>
+                  ✓ No tap cooldown
+                </div>
+                <div style={{ color: '#FFD700', fontSize: 9, marginBottom: 4, fontFamily: 'inherit' }}>
+                  ✓ Unlock Level 4+
+                </div>
+                <div style={{ color: '#FFD700', fontSize: 9, fontFamily: 'inherit' }}>
+                  ✓ Forever (one-time purchase)
+                </div>
+              </div>
+
+              <div style={{
+                fontSize: 28,
+                color: '#FFD700',
+                marginBottom: 16,
+                textShadow: '0 0 15px rgba(255,215,0,0.5)',
+              }}>
+                $2.00
+              </div>
+
+              <button
+                onClick={handlePremiumPurchase}
+                disabled={isPurchasing}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  background: isPurchasing
+                    ? '#666'
+                    : 'linear-gradient(135deg, #FFD700, #FFA500)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  color: isPurchasing ? '#999' : '#000',
+                  fontWeight: 'bold',
+                  cursor: isPurchasing ? 'not-allowed' : 'pointer',
+                  boxShadow: isPurchasing ? 'none' : '0 0 30px rgba(255,215,0,0.5)',
+                }}
+              >
+                {isPurchasing ? 'ACTIVATING...' : 'ACTIVATE PREMIUM (DEMO)'}
+              </button>
+
+              <div style={{
+                marginTop: 12,
+                fontSize: 8,
+                color: '#666',
+                fontFamily: 'inherit',
+              }}>
+                Demo mode • No real payment required
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <header className="header">
           <div className="logo">PYRAMIDMEME</div>
@@ -1398,12 +1742,12 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 {/* Premium */}
-                <div className="shop-item-row">
+                <div className={`shop-item-row ${isPremium ? 'item-premium-active' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">👑</div>
                     <div className="item-details">
                       <div className="item-name">PREMIUM</div>
-                      <div className="item-brief">Unlimited tapping forever</div>
+                      <div className="item-brief">{isPremium ? 'Activated forever!' : 'Unlimited tapping forever'}</div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -1415,7 +1759,13 @@ const PyramidMemeEmpireV5 = () => {
                       <Info size={16} />
                     </button>
                     <div className="item-price-small">$2</div>
-                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                    <button
+                      className={`buy-btn-small ${isPremium ? 'btn-premium-active' : 'btn-premium'}`}
+                      onClick={() => !isPremium && setShowPremiumModal(true)}
+                      disabled={isPremium}
+                    >
+                      {isPremium ? 'ACTIVE' : 'BUY'}
+                    </button>
                   </div>
                 </div>
 
@@ -1480,12 +1830,12 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 {/* Energy Refill */}
-                <div className="shop-item-row">
+                <div className={`shop-item-row ${isPremium ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">🔋</div>
                     <div className="item-details">
                       <div className="item-name">ENERGY REFILL</div>
-                      <div className="item-brief">Instant +100 energy</div>
+                      <div className="item-brief">{isPremium ? 'Not needed (Premium)' : 'Instant +100 energy'}</div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -1497,7 +1847,13 @@ const PyramidMemeEmpireV5 = () => {
                       <Info size={16} />
                     </button>
                     <div className="item-price-small">$0.25</div>
-                    <button className="buy-btn-small" onClick={playWhoosh}>BUY</button>
+                    <button
+                      className={`buy-btn-small ${isPremium ? 'btn-disabled' : 'btn-energy'}`}
+                      onClick={() => !isPremium && setShowEnergyModal(true)}
+                      disabled={isPremium}
+                    >
+                      {isPremium ? 'N/A' : 'BUY'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2639,6 +2995,30 @@ const PyramidMemeEmpireV5 = () => {
         @keyframes pulse-upgrade {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.05); }
+        }
+
+        .buy-btn-small.btn-premium {
+          background: linear-gradient(135deg, #FFD700, #FFA500);
+          color: black;
+          box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+
+        .buy-btn-small.btn-premium-active {
+          background: linear-gradient(135deg, #00AA00, #008800);
+          color: white;
+          cursor: default;
+          box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+        }
+
+        .buy-btn-small.btn-energy {
+          background: linear-gradient(135deg, #00FF00, #00CC00);
+          color: black;
+          box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+        }
+
+        .shop-item-row.item-premium-active {
+          background: rgba(0, 255, 0, 0.1);
+          border-color: rgba(0, 255, 0, 0.3);
         }
 
         /* REFERRALS VIEW */
