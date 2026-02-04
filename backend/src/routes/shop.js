@@ -186,16 +186,46 @@ router.post('/activate',
           break;
 
         case 'boost':
+          // Get current boost status
+          const progress = await GameProgress.findByUserId(req.user.id);
+          const now = new Date();
+          const currentBoostActive = progress.boost_expires_at && new Date(progress.boost_expires_at) > now;
+          const currentMultiplier = currentBoostActive ? parseFloat(progress.boost_multiplier) : 1;
+
+          // Check if trying to downgrade (X2 while X5 is active)
+          if (item.multiplier < currentMultiplier) {
+            return res.status(400).json({
+              error: `Cannot downgrade: You already have a better boost active (X${currentMultiplier})`,
+              currentBoost: currentMultiplier
+            });
+          }
+
+          // Check if upgrading (X5 while X2 is active)
+          const isUpgrade = currentBoostActive && item.multiplier > currentMultiplier;
+
+          // Apply the boost (this will overwrite any existing boost)
           const boostResult = await GameProgress.applyBoost(req.user.id, item.multiplier, item.duration);
           boostInfo = {
             multiplier: item.multiplier,
             expiresAt: boostResult.boost_expires_at,
             type: item.id
           };
-          result = {
-            message: `${item.multiplier}X boost activated for 24 hours!`,
-            boost: boostInfo
-          };
+
+          if (isUpgrade) {
+            result = {
+              message: `Boost upgraded! X${currentMultiplier} → X${item.multiplier}`,
+              boost: boostInfo,
+              upgraded: true,
+              from: currentMultiplier,
+              to: item.multiplier
+            };
+          } else {
+            result = {
+              message: `${item.multiplier}X boost activated for 24 hours!`,
+              boost: boostInfo,
+              upgraded: false
+            };
+          }
           break;
 
         case 'consumable':

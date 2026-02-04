@@ -630,8 +630,10 @@ const PyramidMemeEmpireV5 = () => {
       return;
     }
 
-    if (isBoostActive) {
-      showNotification('⚡ A boost is already active!');
+    // Check if trying to downgrade (X2 when X5 is active)
+    const requestedMultiplier = boostId === 'boost_5x' ? 5 : 2;
+    if (isBoostActive && requestedMultiplier < boostMultiplier) {
+      showNotification(`⚠️ Cannot downgrade: You have X${boostMultiplier} active!`);
       return;
     }
 
@@ -648,7 +650,13 @@ const PyramidMemeEmpireV5 = () => {
         setBoostType(result.boost.type);
         setIsBoostActive(true);
         setShowBoostModal(false);
-        showNotification(`🔥 ${result.boost.multiplier}X BOOST ACTIVATED!`);
+
+        // Show appropriate message for upgrade vs new activation
+        if (result.upgraded) {
+          showNotification(`🎉 Boost upgraded! X${result.from} → X${result.to}`);
+        } else {
+          showNotification(`🔥 ${result.boost.multiplier}X BOOST ACTIVATED!`);
+        }
         playWhoosh();
       } else {
         showNotification(result.message || '✅ Activated!');
@@ -656,7 +664,9 @@ const PyramidMemeEmpireV5 = () => {
       }
     } catch (err) {
       console.error('Purchase error:', err);
-      showNotification('❌ Purchase failed');
+      // Show backend error message if available
+      const errorMsg = err.message || 'Purchase failed';
+      showNotification(`❌ ${errorMsg}`);
     } finally {
       setIsPurchasing(false);
     }
@@ -1410,13 +1420,13 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 {/* Boost X2 */}
-                <div className={`shop-item-row ${isBoostActive ? 'item-disabled' : ''}`}>
+                <div className={`shop-item-row ${boostMultiplier >= 2 ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">⚡</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X2</div>
                       <div className="item-brief">
-                        {isBoostActive ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '2X bricks for 24h'}
+                        {boostType === 'x2' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '2X bricks for 24h'}
                       </div>
                     </div>
                   </div>
@@ -1430,23 +1440,23 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                     <div className="item-price-small">$0.50</div>
                     <button
-                      className={`buy-btn-small ${isBoostActive ? 'btn-disabled' : ''}`}
-                      onClick={() => !isBoostActive && openBoostModal('boost_2x')}
-                      disabled={isBoostActive}
+                      className={`buy-btn-small ${boostMultiplier >= 2 ? 'btn-disabled' : ''}`}
+                      onClick={() => boostMultiplier < 2 && openBoostModal('boost_2x')}
+                      disabled={boostMultiplier >= 2}
                     >
-                      {isBoostActive && boostType === 'x2' ? 'ACTIVE' : 'BUY'}
+                      {boostType === 'x2' ? 'ACTIVE' : boostMultiplier >= 2 ? 'BLOCKED' : 'BUY'}
                     </button>
                   </div>
                 </div>
 
                 {/* Boost X5 */}
-                <div className={`shop-item-row ${isBoostActive ? 'item-disabled' : ''}`}>
+                <div className={`shop-item-row ${boostMultiplier === 5 ? 'item-disabled' : ''}`}>
                   <div className="item-left">
                     <div className="item-icon-small">🔥</div>
                     <div className="item-details">
                       <div className="item-name">BOOST X5</div>
                       <div className="item-brief">
-                        {isBoostActive ? `Active: ${formatBoostTime(boostTimeRemaining)}` : '5X bricks for 24h'}
+                        {boostType === 'x5' ? `Active: ${formatBoostTime(boostTimeRemaining)}` : boostType === 'x2' ? 'UPGRADE available!' : '5X bricks for 24h'}
                       </div>
                     </div>
                   </div>
@@ -1460,11 +1470,11 @@ const PyramidMemeEmpireV5 = () => {
                     </button>
                     <div className="item-price-small">$1.50</div>
                     <button
-                      className={`buy-btn-small ${isBoostActive ? 'btn-disabled' : ''}`}
-                      onClick={() => !isBoostActive && openBoostModal('boost_5x')}
-                      disabled={isBoostActive}
+                      className={`buy-btn-small ${boostMultiplier === 5 ? 'btn-disabled' : boostType === 'x2' ? 'btn-upgrade' : ''}`}
+                      onClick={() => boostMultiplier !== 5 && openBoostModal('boost_5x')}
+                      disabled={boostMultiplier === 5}
                     >
-                      {isBoostActive && boostType === 'x5' ? 'ACTIVE' : 'BUY'}
+                      {boostType === 'x5' ? 'ACTIVE' : boostType === 'x2' ? 'UPGRADE' : 'BUY'}
                     </button>
                   </div>
                 </div>
@@ -2617,6 +2627,18 @@ const PyramidMemeEmpireV5 = () => {
 
         .shop-item-row.item-disabled {
           opacity: 0.7;
+        }
+
+        .buy-btn-small.btn-upgrade {
+          background: linear-gradient(135deg, #FFA500, #FF6600);
+          color: black;
+          animation: pulse-upgrade 1.5s infinite;
+          box-shadow: 0 0 15px rgba(255, 165, 0, 0.5);
+        }
+
+        @keyframes pulse-upgrade {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
         }
 
         /* REFERRALS VIEW */
