@@ -417,6 +417,12 @@ const PyramidMemeEmpireV5 = () => {
 
         // Update last tap time for client-side cooldown
         setLastTapTime(now);
+
+        // VISUAL EFFECTS for authenticated tap
+        setPyramidPulse(true);
+        setTimeout(() => setPyramidPulse(false), 300);
+        playCoinSound();
+        createParticles(e.clientX, e.clientY);
       } catch (err) {
         if (err.message?.includes('cooldown') || err.message?.includes('Wait') || err.message?.includes('Too many')) {
           showNotification('⏱️ COOLDOWN!');
