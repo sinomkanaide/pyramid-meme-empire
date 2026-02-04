@@ -94,6 +94,7 @@ const PyramidMemeEmpireV5 = () => {
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isTapping, setIsTapping] = useState(false);
   const tapInFlight = useRef(false);
+  const [xpProgress, setXpProgress] = useState({ current: 0, needed: 100, percent: 0 });
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -329,6 +330,11 @@ const PyramidMemeEmpireV5 = () => {
       setBoostExpiresAt(data.boostExpiresAt || null);
       setBoostType(data.boostType || null);
       setIsBoostActive(data.isBoostActive || false);
+
+      // Load XP progress
+      if (data.xpProgress) {
+        setXpProgress(data.xpProgress);
+      }
     } catch (err) {
       console.error('Load progress error:', err);
     }
@@ -390,6 +396,11 @@ const PyramidMemeEmpireV5 = () => {
         setIsBoostActive(result.isBoostActive || false);
         setBoostExpiresAt(result.boostExpiresAt || null);
         setBoostType(result.boostType || null);
+
+        // Update XP progress
+        if (result.xpProgress) {
+          setXpProgress(result.xpProgress);
+        }
 
         if (result.leveledUp) {
           triggerLevelUp();
@@ -463,45 +474,69 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   // ========== PARTICLES ==========
-  const createParticles = (x, y) => {
+  const createParticles = (x, y, forLevelUp = false) => {
     const rect = document.getElementById('tap-area')?.getBoundingClientRect();
     if (!rect) return;
-    
+
     const relX = ((x - rect.left) / rect.width) * 100;
     const relY = ((y - rect.top) / rect.height) * 100;
-    
+
     const confettiShapes = ['▪', '▫', '●', '◆', '★'];
     const cryptoEmojis = ['💎', '🚀', '⚡', '💰', '🔥'];
-    
-    const newParticles = [
-      ...Array.from({ length: 3 }, (_, i) => ({
-        id: `c-${Date.now()}-${i}`,
-        type: 'confetti',
+
+    // Premium users get more particles, free users get 1 emoji
+    // Level up always gets full celebration
+    const showFullParticles = isPremium || hasBattlePass || forLevelUp;
+
+    let newParticles = [];
+
+    if (showFullParticles) {
+      // Premium: 3 confetti + 3 emojis
+      newParticles = [
+        ...Array.from({ length: 3 }, (_, i) => ({
+          id: `c-${Date.now()}-${i}`,
+          type: 'confetti',
+          x: relX,
+          y: relY,
+          vx: (Math.random() - 0.5) * 3,
+          vy: -4 - Math.random() * 2,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 15,
+          content: confettiShapes[Math.floor(Math.random() * confettiShapes.length)],
+          color: ['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFD700'][Math.floor(Math.random() * 5)],
+        })),
+        ...Array.from({ length: 3 }, (_, i) => ({
+          id: `e-${Date.now()}-${i}`,
+          type: 'emoji',
+          x: relX + (Math.random() - 0.5) * 10,
+          y: relY,
+          vx: (Math.random() - 0.5) * 2,
+          vy: -3 - Math.random() * 2,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 8,
+          content: cryptoEmojis[Math.floor(Math.random() * cryptoEmojis.length)],
+          color: '#FFFFFF',
+        })),
+      ];
+    } else {
+      // Free users: 1 simple emoji only
+      newParticles = [{
+        id: `e-${Date.now()}-0`,
+        type: 'emoji',
         x: relX,
         y: relY,
-        vx: (Math.random() - 0.5) * 3,
-        vy: -4 - Math.random() * 2,
-        rotation: Math.random() * 360,
-        rotationSpeed: (Math.random() - 0.5) * 15,
-        content: confettiShapes[Math.floor(Math.random() * confettiShapes.length)],
-        color: ['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00'][Math.floor(Math.random() * 4)],
-      })),
-      ...Array.from({ length: 3 }, (_, i) => ({
-        id: `e-${Date.now()}-${i}`,
-        type: 'emoji',
-        x: relX + (Math.random() - 0.5) * 10,
-        y: relY,
-        vx: (Math.random() - 0.5) * 2,
-        vy: -3 - Math.random() * 2,
-        rotation: Math.random() * 360,
-        rotationSpeed: (Math.random() - 0.5) * 10,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -2.5 - Math.random(),
+        rotation: 0,
+        rotationSpeed: 0,
         content: cryptoEmojis[Math.floor(Math.random() * cryptoEmojis.length)],
-      })),
-    ];
-    
+        color: '#FFFFFF',
+      }];
+    }
+
     setParticles(prev => [...prev, ...newParticles]);
     setTimeout(() => {
-      setParticles(prev => 
+      setParticles(prev =>
         prev.filter(p => !newParticles.find(np => np.id === p.id))
       );
     }, 3500);
@@ -529,11 +564,12 @@ const PyramidMemeEmpireV5 = () => {
     showNotification(`🎊 LEVEL ${level + 1}!`);
     setShowFireworks(true);
     setTimeout(() => setShowFireworks(false), 3000);
-    
+
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
     for (let i = 0; i < 5; i++) {
-      setTimeout(() => createParticles(centerX, centerY), i * 100);
+      // Always show full particles for level up (true = forLevelUp)
+      setTimeout(() => createParticles(centerX, centerY, true), i * 100);
     }
   };
 
@@ -1636,10 +1672,10 @@ const PyramidMemeEmpireV5 = () => {
               <div className="progress-section">
                 <div className="progress-info">
                   <span className="progress-text">Level {level}</span>
-                  <span className="progress-text">{bricks % 100}/100 to next</span>
+                  <span className="progress-text">{xpProgress.current}/{xpProgress.needed} to next</span>
                 </div>
                 <div className="progress-bar-wrap">
-                  <div className="progress-bar-fill" style={{ width: `${(bricks % 100)}%` }} />
+                  <div className="progress-bar-fill" style={{ width: `${xpProgress.percent}%` }} />
                 </div>
               </div>
             </div>

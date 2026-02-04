@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticateToken, tapRateLimit } = require('../middleware/auth');
 const User = require('../models/User');
 const GameProgress = require('../models/GameProgress');
+const { getXpProgress } = require('../models/GameProgress');
 
 const router = express.Router();
 
@@ -27,6 +28,9 @@ router.get('/progress', async (req, res) => {
     const isBoostActive = boostExpiresAt && boostExpiresAt > now;
     const activeMultiplier = isBoostActive ? parseFloat(progress.boost_multiplier) : 1;
 
+    // Calculate XP progress for current level
+    const xpProgress = getXpProgress(progress.bricks, progress.level);
+
     res.json({
       bricks: progress.bricks,
       level: progress.level,
@@ -41,7 +45,8 @@ router.get('/progress', async (req, res) => {
       rank,
       isPremium: req.user.isPremium,
       isLevelCapped,
-      maxFreeLevel: FREE_USER_MAX_LEVEL
+      maxFreeLevel: FREE_USER_MAX_LEVEL,
+      xpProgress
     });
   } catch (error) {
     console.error('Get progress error:', error);
@@ -82,7 +87,8 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       boostMultiplier: isBoostActive ? parseFloat(result.boost_multiplier) : 1,
       boostExpiresAt: isBoostActive ? boostExpiresAt.toISOString() : null,
       boostType: isBoostActive ? result.boost_type : null,
-      isBoostActive
+      isBoostActive,
+      xpProgress: result.xpProgress
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {

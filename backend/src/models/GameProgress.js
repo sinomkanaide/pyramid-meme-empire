@@ -1,5 +1,45 @@
 const db = require('../config/database');
 
+// XP formula: XP_required = 100 * (level^1.5)
+// Calculate XP required to go from level N to level N+1
+const xpForLevel = (level) => Math.floor(100 * Math.pow(level, 1.5));
+
+// Calculate total XP needed to reach a specific level (cumulative)
+const totalXpForLevel = (level) => {
+  let total = 0;
+  for (let i = 1; i < level; i++) {
+    total += xpForLevel(i);
+  }
+  return total;
+};
+
+// Calculate level from total XP (bricks)
+const calculateLevelFromXp = (totalXp) => {
+  let level = 1;
+  let xpNeeded = 0;
+  while (true) {
+    const nextLevelXp = xpForLevel(level);
+    if (xpNeeded + nextLevelXp > totalXp) {
+      break;
+    }
+    xpNeeded += nextLevelXp;
+    level++;
+  }
+  return level;
+};
+
+// Get XP progress within current level
+const getXpProgress = (totalXp, level) => {
+  const xpAtLevelStart = totalXpForLevel(level);
+  const xpInCurrentLevel = totalXp - xpAtLevelStart;
+  const xpNeededForNext = xpForLevel(level);
+  return {
+    current: xpInCurrentLevel,
+    needed: xpNeededForNext,
+    percent: Math.min(100, Math.floor((xpInCurrentLevel / xpNeededForNext) * 100))
+  };
+};
+
 class GameProgress {
   // Get progress by user ID
   static async findByUserId(userId) {
@@ -48,13 +88,18 @@ class GameProgress {
     const bricksEarned = Math.floor(1 * multiplier);
     const energyUsed = isPremium ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;
-    const calculatedLevel = Math.floor(newBricks / 100) + 1;
     const newEnergy = isPremium ? progress.energy : Math.max(0, progress.energy - 1);
+
+    // Calculate level using exponential formula
+    const calculatedLevel = calculateLevelFromXp(newBricks);
 
     // FREE USER LEVEL CAP: Max level 3 without premium
     const FREE_USER_MAX_LEVEL = 3;
     const isLevelCapped = !isPremium && calculatedLevel > FREE_USER_MAX_LEVEL;
     const newLevel = isLevelCapped ? FREE_USER_MAX_LEVEL : calculatedLevel;
+
+    // Get XP progress for frontend
+    const xpProgress = getXpProgress(newBricks, newLevel);
 
     // Update game progress
     const result = await db.query(
@@ -88,7 +133,12 @@ class GameProgress {
       leveledUp,
       newLevel: leveledUp ? newLevel : null,
       isLevelCapped,
-      maxFreeLevel: FREE_USER_MAX_LEVEL
+      maxFreeLevel: FREE_USER_MAX_LEVEL,
+      xpProgress: {
+        current: xpProgress.current,
+        needed: xpProgress.needed,
+        percent: xpProgress.percent
+      }
     };
   }
 
@@ -169,3 +219,6 @@ class GameProgress {
 }
 
 module.exports = GameProgress;
+module.exports.xpForLevel = xpForLevel;
+module.exports.getXpProgress = getXpProgress;
+module.exports.calculateLevelFromXp = calculateLevelFromXp;
