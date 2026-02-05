@@ -1,88 +1,17 @@
 const db = require('../config/database');
 
-// Initial quests data
-const INITIAL_QUESTS = [
-  {
-    quest_id: 'follow_x',
-    title: 'Follow @PyramidMeme on X',
-    description: 'Follow our official X account',
-    type: 'social',
-    verification_method: 'manual',
-    xp_reward: 500,
-    external_url: 'https://twitter.com/pyramidmeme',
-    icon: '🐦'
-  },
-  {
-    quest_id: 'like_post',
-    title: 'Like our pinned post',
-    description: 'Like the pinned post on our X profile',
-    type: 'social',
-    verification_method: 'manual',
-    xp_reward: 300,
-    external_url: 'https://twitter.com/pyramidmeme',
-    icon: '❤️'
-  },
-  {
-    quest_id: 'retweet',
-    title: 'Retweet announcement',
-    description: 'Retweet our latest announcement',
-    type: 'social',
-    verification_method: 'manual',
-    xp_reward: 800,
-    external_url: 'https://twitter.com/pyramidmeme',
-    icon: '🔄'
-  },
-  {
-    quest_id: 'join_discord',
-    title: 'Join Discord server',
-    description: 'Join our community on Discord',
-    type: 'social',
-    verification_method: 'manual',
-    xp_reward: 500,
-    external_url: 'https://discord.gg/pyramidmeme',
-    icon: '💬'
-  },
-  {
-    quest_id: 'kiichain_testnet',
-    title: 'Complete KiiChain Quest',
-    description: 'Connect wallet on KiiChain testnet',
-    type: 'partner_api',
-    verification_method: 'manual',
-    xp_reward: 3000,
-    external_url: 'https://kiichain.io/testnet',
-    icon: '🔗'
-  },
-  {
-    quest_id: 'level_10',
-    title: 'Reach Level 10',
-    description: 'Level up your pyramid to level 10',
-    type: 'milestone',
-    verification_method: 'internal',
-    xp_reward: 2000,
-    external_url: null,
-    icon: '🏆'
-  },
-  {
-    quest_id: 'taps_1000',
-    title: 'Make 1,000 taps',
-    description: 'Tap on your pyramid 1,000 times',
-    type: 'milestone',
-    verification_method: 'internal',
-    xp_reward: 1000,
-    external_url: null,
-    icon: '👆'
-  },
-  {
-    quest_id: 'referrals_5',
-    title: 'Invite 5 verified friends',
-    description: 'Invite friends who purchase Premium or Battle Pass',
-    type: 'referral',
-    verification_method: 'internal',
-    xp_reward: 2500,
-    external_url: null,
-    icon: '👥'
-  }
-];
+// XP rewards mapping for existing quests (since reward_amount is null in DB)
+const XP_REWARDS = {
+  'twitter_follow': 500,
+  'twitter_like': 300,
+  'twitter_retweet': 800,
+  'discord_join': 500,
+  'telegram_join': 500,
+  'level_milestone': 2000,
+  'tap_milestone': 1000,
+  'referral_milestone': 2500,
+  'partner_quest': 3000
+};
 
 class Quest {
   // Check if tables exist
@@ -112,32 +41,50 @@ class Quest {
     }
   }
 
-  // Initialize quests table and seed data
+  // Transform DB quest to frontend format
+  static transformQuest(dbQuest) {
+    if (!dbQuest) return null;
+
+    // Get XP reward based on requirement_type
+    const xpReward = dbQuest.reward_amount || XP_REWARDS[dbQuest.requirement_type] || 500;
+
+    // Determine verification method
+    let verificationMethod = 'manual';
+    if (dbQuest.requirement_type?.includes('milestone') || dbQuest.requirement_type?.includes('referral')) {
+      verificationMethod = 'internal';
+    }
+
+    // Get external URL from metadata
+    const externalUrl = dbQuest.requirement_metadata?.url || null;
+
+    // Map quest_type to our type
+    const type = dbQuest.quest_type || 'social';
+
+    return {
+      quest_id: String(dbQuest.id),
+      id: dbQuest.id,
+      title: dbQuest.title,
+      description: dbQuest.description,
+      type: type,
+      verification_method: verificationMethod,
+      xp_reward: xpReward,
+      external_url: externalUrl,
+      icon: dbQuest.icon || '🎯',
+      is_active: dbQuest.is_active !== false,
+      sort_order: dbQuest.sort_order || 0,
+      // Keep original fields too
+      quest_type: dbQuest.quest_type,
+      requirement_type: dbQuest.requirement_type,
+      requirement_value: dbQuest.requirement_value,
+      requirement_metadata: dbQuest.requirement_metadata
+    };
+  }
+
+  // Initialize quest_completions table (quests table already exists with different schema)
   static async initializeTables() {
-    console.log('Starting quest tables initialization...');
+    console.log('Initializing quest_completions table...');
 
-    // Create quests table
-    console.log('Creating quests table...');
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS quests (
-        id SERIAL PRIMARY KEY,
-        quest_id VARCHAR(50) UNIQUE NOT NULL,
-        title VARCHAR(100) NOT NULL,
-        description TEXT,
-        type VARCHAR(20) NOT NULL,
-        verification_method VARCHAR(20) NOT NULL,
-        xp_reward INTEGER NOT NULL DEFAULT 0,
-        is_active BOOLEAN DEFAULT true,
-        external_url TEXT,
-        icon VARCHAR(10),
-        sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    console.log('Quests table created/verified');
-
-    // Create quest_completions table
-    console.log('Creating quest_completions table...');
+    // Only create quest_completions table - quests table already exists
     await db.query(`
       CREATE TABLE IF NOT EXISTS quest_completions (
         id SERIAL PRIMARY KEY,
@@ -149,56 +96,14 @@ class Quest {
         UNIQUE(user_id, quest_id)
       )
     `);
-    console.log('Quest_completions table created/verified');
 
-    // Create indexes
-    console.log('Creating indexes...');
+    // Create index
     await db.query(`
       CREATE INDEX IF NOT EXISTS idx_quest_completions_user
       ON quest_completions(user_id)
     `);
 
-    await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_quests_quest_id
-      ON quests(quest_id)
-    `);
-    console.log('Indexes created/verified');
-
-    // Seed initial quests
-    console.log('Seeding initial quests...');
-    for (let i = 0; i < INITIAL_QUESTS.length; i++) {
-      const quest = INITIAL_QUESTS[i];
-      try {
-        await db.query(`
-          INSERT INTO quests (quest_id, title, description, type, verification_method, xp_reward, external_url, icon, sort_order)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-          ON CONFLICT (quest_id) DO UPDATE SET
-            title = EXCLUDED.title,
-            description = EXCLUDED.description,
-            type = EXCLUDED.type,
-            verification_method = EXCLUDED.verification_method,
-            xp_reward = EXCLUDED.xp_reward,
-            external_url = EXCLUDED.external_url,
-            icon = EXCLUDED.icon,
-            sort_order = EXCLUDED.sort_order
-        `, [
-          quest.quest_id,
-          quest.title,
-          quest.description,
-          quest.type,
-          quest.verification_method,
-          quest.xp_reward,
-          quest.external_url,
-          quest.icon,
-          i
-        ]);
-        console.log(`  Seeded quest: ${quest.quest_id}`);
-      } catch (seedError) {
-        console.error(`  Error seeding quest ${quest.quest_id}:`, seedError.message);
-      }
-    }
-
-    console.log('Quests tables initialized and seeded successfully');
+    console.log('Quest_completions table initialized');
   }
 
   // Get all active quests
@@ -209,70 +114,99 @@ class Quest {
         WHERE is_active = true
         ORDER BY sort_order ASC
       `);
-      return result.rows;
+      return result.rows.map(q => this.transformQuest(q));
     } catch (error) {
       console.error('getAllActive error:', error.message);
       throw new Error(`Failed to get quests: ${error.message}`);
     }
   }
 
-  // Get quest by ID
+  // Get quest by ID (can be numeric id or string quest_id)
   static async findByQuestId(questId) {
-    const result = await db.query(
-      'SELECT * FROM quests WHERE quest_id = $1',
-      [questId]
-    );
-    return result.rows[0];
+    try {
+      // Try to find by numeric id first
+      const numericId = parseInt(questId);
+      let result;
+
+      if (!isNaN(numericId)) {
+        result = await db.query(
+          'SELECT * FROM quests WHERE id = $1',
+          [numericId]
+        );
+      }
+
+      if (!result || result.rows.length === 0) {
+        // Try by string id (for backward compatibility)
+        result = await db.query(
+          'SELECT * FROM quests WHERE id::text = $1',
+          [String(questId)]
+        );
+      }
+
+      return result.rows[0] ? this.transformQuest(result.rows[0]) : null;
+    } catch (error) {
+      console.error('findByQuestId error:', error.message);
+      return null;
+    }
   }
 
   // Get user's completed quests
   static async getUserCompletions(userId) {
     try {
       const result = await db.query(`
-        SELECT qc.*, q.title, q.type, q.icon
+        SELECT qc.*, q.title, q.quest_type as type, q.icon
         FROM quest_completions qc
-        JOIN quests q ON qc.quest_id = q.quest_id
+        LEFT JOIN quests q ON qc.quest_id::integer = q.id
         WHERE qc.user_id = $1
         ORDER BY qc.completed_at DESC
       `, [userId]);
       return result.rows;
     } catch (error) {
       console.error('getUserCompletions error:', error.message);
-      // Return empty array if table doesn't exist or other error
       return [];
     }
   }
 
   // Check if user has completed a quest
   static async isCompleted(userId, questId) {
-    const result = await db.query(
-      'SELECT id FROM quest_completions WHERE user_id = $1 AND quest_id = $2',
-      [userId, questId]
-    );
-    return result.rows.length > 0;
+    try {
+      const result = await db.query(
+        'SELECT id FROM quest_completions WHERE user_id = $1 AND quest_id = $2',
+        [userId, String(questId)]
+      );
+      return result.rows.length > 0;
+    } catch (error) {
+      console.error('isCompleted error:', error.message);
+      return false;
+    }
   }
 
   // Complete a quest for user
   static async complete(userId, questId, xpEarned) {
-    const result = await db.query(`
-      INSERT INTO quest_completions (user_id, quest_id, xp_earned, is_verified)
-      VALUES ($1, $2, $3, true)
-      ON CONFLICT (user_id, quest_id) DO NOTHING
-      RETURNING *
-    `, [userId, questId, xpEarned]);
+    try {
+      const result = await db.query(`
+        INSERT INTO quest_completions (user_id, quest_id, xp_earned, is_verified)
+        VALUES ($1, $2, $3, true)
+        ON CONFLICT (user_id, quest_id) DO NOTHING
+        RETURNING *
+      `, [userId, String(questId), xpEarned]);
 
-    if (result.rows.length === 0) {
-      return null; // Already completed
+      if (result.rows.length === 0) {
+        return null; // Already completed
+      }
+
+      // Add XP to user's game_progress (as bricks)
+      await db.query(`
+        UPDATE game_progress
+        SET bricks = bricks + $1, updated_at = NOW()
+        WHERE user_id = $2
+      `, [xpEarned, userId]);
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('complete error:', error.message);
+      return null;
     }
-
-    // Add XP to user's game_progress (as bricks for now)
-    await db.query(`
-      UPDATE game_progress
-      SET bricks = bricks + $1, updated_at = NOW()
-      WHERE user_id = $2
-    `, [xpEarned, userId]);
-
-    return result.rows[0];
   }
 
   // Get user's progress for milestone quests
@@ -280,7 +214,6 @@ class Quest {
     let progress = { level: 1, total_taps: 0, bricks: 0 };
     let verifiedReferrals = 0;
 
-    // Get user's level and total taps
     try {
       const progressResult = await db.query(`
         SELECT gp.level, gp.total_taps, gp.bricks
@@ -292,7 +225,6 @@ class Quest {
       console.error('getUserProgress - game_progress error:', error.message);
     }
 
-    // Get verified referrals count
     try {
       const referralsResult = await db.query(`
         SELECT COUNT(*) as verified_count
@@ -302,7 +234,6 @@ class Quest {
       verifiedReferrals = parseInt(referralsResult.rows[0]?.verified_count || 0);
     } catch (error) {
       console.error('getUserProgress - referrals error:', error.message);
-      // Table might not exist or have different structure, use 0
     }
 
     return {
@@ -315,64 +246,64 @@ class Quest {
 
   // Check if user can complete an internal quest
   static async canComplete(userId, questId) {
-    const progress = await this.getUserProgress(userId);
-
-    switch (questId) {
-      case 'level_10':
-        return {
-          canComplete: progress.level >= 10,
-          current: progress.level,
-          required: 10,
-          progressText: `${progress.level}/10 levels`
-        };
-
-      case 'taps_1000':
-        return {
-          canComplete: progress.totalTaps >= 1000,
-          current: progress.totalTaps,
-          required: 1000,
-          progressText: `${progress.totalTaps}/1,000 taps`
-        };
-
-      case 'referrals_5':
-        return {
-          canComplete: progress.verifiedReferrals >= 5,
-          current: progress.verifiedReferrals,
-          required: 5,
-          progressText: `${progress.verifiedReferrals}/5 verified friends`
-        };
-
-      default:
-        // Social and partner quests can always be "completed" (manual verification)
-        return {
-          canComplete: true,
-          current: 0,
-          required: 0,
-          progressText: null
-        };
-    }
-  }
-
-  // Get quest with user status
-  static async getQuestWithStatus(userId, questId) {
     const quest = await this.findByQuestId(questId);
-    if (!quest) return null;
+    if (!quest) return { canComplete: true, current: 0, required: 0, progressText: null };
 
-    const isCompleted = await this.isCompleted(userId, questId);
-    const canComplete = await this.canComplete(userId, questId);
+    // Social quests can always be "completed" (manual verification)
+    if (quest.verification_method === 'manual') {
+      return { canComplete: true, current: 0, required: 0, progressText: null };
+    }
 
-    return {
-      ...quest,
-      isCompleted,
-      ...canComplete
-    };
+    const progress = await this.getUserProgress(userId);
+    const reqType = quest.requirement_type || '';
+    const reqValue = quest.requirement_value || 1;
+
+    // Check based on requirement_type from DB
+    if (reqType.includes('level')) {
+      return {
+        canComplete: progress.level >= reqValue,
+        current: progress.level,
+        required: reqValue,
+        progressText: `${progress.level}/${reqValue} levels`
+      };
+    }
+
+    if (reqType.includes('tap')) {
+      return {
+        canComplete: progress.totalTaps >= reqValue,
+        current: progress.totalTaps,
+        required: reqValue,
+        progressText: `${progress.totalTaps.toLocaleString()}/${reqValue.toLocaleString()} taps`
+      };
+    }
+
+    if (reqType.includes('referral')) {
+      return {
+        canComplete: progress.verifiedReferrals >= reqValue,
+        current: progress.verifiedReferrals,
+        required: reqValue,
+        progressText: `${progress.verifiedReferrals}/${reqValue} verified friends`
+      };
+    }
+
+    if (reqType.includes('brick') || reqType.includes('stack')) {
+      return {
+        canComplete: progress.totalBricks >= reqValue,
+        current: progress.totalBricks,
+        required: reqValue,
+        progressText: `${progress.totalBricks.toLocaleString()}/${reqValue.toLocaleString()} bricks`
+      };
+    }
+
+    // Default: can complete
+    return { canComplete: true, current: 0, required: 0, progressText: null };
   }
 
   // Get all quests with user status
   static async getAllWithUserStatus(userId) {
     const quests = await this.getAllActive();
     const completions = await this.getUserCompletions(userId);
-    const completedIds = new Set(completions.map(c => c.quest_id));
+    const completedIds = new Set(completions.map(c => String(c.quest_id)));
 
     const questsWithStatus = await Promise.all(
       quests.map(async (quest) => {
@@ -399,7 +330,7 @@ class Quest {
       return parseInt(result.rows[0]?.total_xp || 0);
     } catch (error) {
       console.error('getTotalQuestXP error:', error.message);
-      return 0; // Return 0 if table doesn't exist
+      return 0;
     }
   }
 }
