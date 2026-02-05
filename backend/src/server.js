@@ -64,12 +64,16 @@ app.post('/api/test-body', (req, res) => {
 // Public endpoint to check quest data format (no auth)
 app.get('/api/diagnostics/quests-sample', async (req, res) => {
   try {
-    const db = require('./config/database');
-    const result = await db.query('SELECT * FROM quests LIMIT 2');
+    // Get transformed quests directly from Quest model
+    const allQuests = await Quest.getAllActive();
+
     res.json({
-      questCount: result.rows.length,
-      sampleQuests: result.rows,
-      questKeys: result.rows[0] ? Object.keys(result.rows[0]) : []
+      questCount: allQuests.length,
+      sampleQuests: allQuests.slice(0, 2),
+      questKeys: allQuests[0] ? Object.keys(allQuests[0]) : [],
+      hasQuestId: allQuests[0]?.quest_id ? true : false,
+      hasExternalUrl: allQuests[0]?.external_url ? true : false,
+      hasXpReward: allQuests[0]?.xp_reward ? true : false
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
