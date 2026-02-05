@@ -4,8 +4,10 @@ const { authenticateToken } = require('../middleware/auth');
 const User = require('../models/User');
 const GameProgress = require('../models/GameProgress');
 const Transaction = require('../models/Transaction');
+const { PaymentService, PRICES } = require('../services/paymentService');
 
 const router = express.Router();
+const paymentService = new PaymentService();
 
 // Shop items configuration
 const SHOP_ITEMS = {
@@ -70,7 +72,7 @@ router.get('/items', (req, res) => {
   res.json({ items });
 });
 
-// POST /shop/purchase - Initiate purchase
+// POST /shop/purchase - Real USDC purchase with on-chain verification
 router.post('/purchase',
   body('itemId').isString().isIn(Object.keys(SHOP_ITEMS)),
   body('txHash').isString().isLength({ min: 66, max: 66 }),
@@ -82,74 +84,152 @@ router.post('/purchase',
 
     const { itemId, txHash } = req.body;
     const item = SHOP_ITEMS[itemId];
+    const userId = req.user.id;
+    const userWallet = req.user.wallet_address;
 
     try {
-      // Check if transaction already processed
+      // 1. Anti-replay: check if txHash already used
       const existingTx = await Transaction.findByTxHash(txHash);
       if (existingTx) {
-        return res.status(400).json({ error: 'Transaction already processed' });
+        return res.status(409).json({ error: 'Transaction already used' });
       }
 
-      // Create pending transaction record
+      // 2. Create pending transaction record
       const transaction = await Transaction.create(
-        req.user.id,
+        userId,
         txHash,
         'purchase',
         item.price,
         itemId
       );
 
-      // Verify the USDC transfer on-chain
-      const verification = await Transaction.verifyUSDCTransfer(
-        txHash,
-        item.price,
-        process.env.SHOP_WALLET_ADDRESS
-      );
+      // 3. Verify payment on-chain with PaymentService
+      const verification = await paymentService.verifyPayment(txHash, userWallet, itemId);
 
-      if (!verification.verified) {
+      if (!verification.valid) {
         await Transaction.updateStatus(txHash, 'failed');
         return res.status(400).json({
           error: 'Payment verification failed',
-          reason: verification.reason
+          reason: verification.error
         });
       }
 
-      // Payment verified - apply the purchase
+      // 4. Update transaction with on-chain details
       await Transaction.updateStatus(txHash, 'confirmed');
+      await Transaction.updateOnChainDetails(txHash, {
+        chain_id: 8453,
+        block_number: verification.details.blockNumber
+      });
 
+      // 5. Apply purchase based on item type
       let result = {};
 
       switch (item.type) {
-        case 'subscription':
-          await User.setPremium(req.user.id, item.duration);
-          result = { message: 'Premium activated!', duration: item.duration };
-          break;
+        case 'battle_pass': {
+          const hasBattlePass = await User.checkBattlePass(userId);
+          if (hasBattlePass) {
+            return res.status(400).json({ error: 'You already have an active Battle Pass!' });
+          }
 
-        case 'boost':
-          await GameProgress.applyBoost(req.user.id, item.multiplier, item.duration);
-          result = { message: `${item.multiplier}X boost activated!`, duration: item.duration };
-          break;
+          const battlePassUser = await User.setBattlePass(userId);
 
-        case 'consumable':
+          // Mark referral as verified if user was referred
+          const referrerId = await User.getReferrerId(userId);
+          if (referrerId) {
+            await User.verifyReferral(userId, 'battle_pass');
+          }
+
+          const referralCode = await User.getReferralCode(userId);
+
+          // Battle Pass includes X5 permanent boost (30 days)
+          await GameProgress.applyBoost(userId, 5, 30 * 24); // 30 days in hours
+
+          result = {
+            message: 'Battle Pass activated for 30 days!',
+            type: 'battle_pass',
+            hasBattlePass: true,
+            expiresAt: battlePassUser.battle_pass_expires_at,
+            referralCode
+          };
+          break;
+        }
+
+        case 'subscription': {
+          if (req.user.is_premium) {
+            return res.status(400).json({ error: 'You already have Premium!' });
+          }
+
+          await User.setPremium(userId);
+
+          const premiumReferrerId = await User.getReferrerId(userId);
+          if (premiumReferrerId) {
+            await User.verifyReferral(userId, 'premium');
+          }
+
+          result = {
+            message: 'Premium activated forever!',
+            type: 'premium',
+            isPremium: true
+          };
+          break;
+        }
+
+        case 'boost': {
+          const progress = await GameProgress.findByUserId(userId);
+          const now = new Date();
+          const currentBoostActive = progress.boost_expires_at && new Date(progress.boost_expires_at) > now;
+          const currentMultiplier = currentBoostActive ? parseFloat(progress.boost_multiplier) : 1;
+
+          if (item.multiplier < currentMultiplier) {
+            return res.status(400).json({
+              error: `Cannot downgrade: You already have X${currentMultiplier} boost active`
+            });
+          }
+
+          const boostResult = await GameProgress.applyBoost(userId, item.multiplier, item.duration);
+
+          result = {
+            message: `${item.multiplier}X boost activated for 24 hours!`,
+            boost: {
+              multiplier: item.multiplier,
+              expiresAt: boostResult.boost_expires_at,
+              type: item.id
+            }
+          };
+          break;
+        }
+
+        case 'consumable': {
           if (itemId === 'energy_refill') {
-            await GameProgress.regenerateEnergy(req.user.id, 100);
-            result = { message: 'Energy refilled to 100!' };
+            const userHasBattlePass = await User.checkBattlePass(userId);
+            if (req.user.is_premium || userHasBattlePass) {
+              return res.status(400).json({ error: 'Premium/Battle Pass users have unlimited energy!' });
+            }
+
+            const newEnergy = await GameProgress.regenerateEnergy(userId, 100);
+            result = {
+              message: 'Energy refilled to 100!',
+              type: 'energy',
+              energy: newEnergy
+            };
           }
           break;
+        }
       }
+
+      // 6. Success response
+      console.log(`[Shop] Purchase completed: ${itemId} by user ${userId} | tx: ${txHash}`);
 
       res.json({
         success: true,
-        transaction: {
-          id: transaction.id,
-          txHash: transaction.tx_hash,
-          status: 'confirmed',
-          item: itemId
-        },
+        item: { id: item.id, name: item.name, price: item.price },
+        txHash,
+        blockNumber: verification.details.blockNumber,
         ...result
       });
+
     } catch (error) {
-      console.error('Purchase error:', error);
+      console.error('[Shop] Purchase error:', error);
       res.status(500).json({ error: 'Failed to process purchase' });
     }
   }

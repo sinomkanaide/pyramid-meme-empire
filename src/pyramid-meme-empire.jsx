@@ -1,5 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
+import { ethers } from 'ethers';
+
+// ========== USDC PAYMENT CONFIG (Base Network) ==========
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const SHOP_WALLET = '0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027';
+const BASE_CHAIN_ID = 8453;
+
+const USDC_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+];
+
+const USDC_PRICES = {
+  premium: 2000000n,       // $2.00
+  boost_2x: 500000n,       // $0.50
+  boost_5x: 1500000n,      // $1.50
+  energy_refill: 250000n,  // $0.25
+  battle_pass: 5000000n    // $5.00
+};
+
+const PRICE_LABELS = {
+  premium: '$2.00',
+  boost_2x: '$0.50',
+  boost_5x: '$1.50',
+  energy_refill: '$0.25',
+  battle_pass: '$5.00'
+};
 
 // ========== TOOLTIP DATA ==========
 const TOOLTIP_DATA = {
@@ -100,6 +127,7 @@ const PyramidMemeEmpireV5 = () => {
   const [showEnergyModal, setShowEnergyModal] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showBattlePassModal, setShowBattlePassModal] = useState(false);
+  const [purchaseStatus, setPurchaseStatus] = useState(''); // '', 'signing', 'confirming', 'verifying', 'done', 'error'
   const [isTapping, setIsTapping] = useState(false);
   const tapInFlight = useRef(false);
   const [xpProgress, setXpProgress] = useState({ current: 0, needed: 100, percent: 0 });
@@ -857,26 +885,117 @@ const PyramidMemeEmpireV5 = () => {
     await completeQuest(quest.quest_id);
   };
 
+  // ========== USDC PAYMENT FUNCTION ==========
+  const purchaseItem = async (itemType) => {
+    try {
+      // 1. Check wallet is connected
+      if (!window.ethereum) {
+        throw new Error('Please install MetaMask');
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
+
+      // 2. Ensure we're on Base Network
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== BASE_CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x2105' }]
+          });
+        } catch (switchError) {
+          if (switchError.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x2105',
+                chainName: 'Base',
+                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://mainnet.base.org'],
+                blockExplorerUrls: ['https://basescan.org']
+              }]
+            });
+          } else {
+            throw new Error('Please switch to Base Network');
+          }
+        }
+        // Re-create provider after chain switch
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // 3. Check USDC balance
+      const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
+      const balance = await usdcContract.balanceOf(userAddress);
+      const price = USDC_PRICES[itemType];
+
+      if (balance < price) {
+        const balanceFormatted = (Number(balance) / 1e6).toFixed(2);
+        throw new Error(`Insufficient USDC balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
+      }
+
+      // 4. Send USDC transfer
+      setPurchaseStatus('signing');
+      const tx = await usdcContract.transfer(SHOP_WALLET, price);
+
+      // 5. Wait for confirmations
+      setPurchaseStatus('confirming');
+      const receipt = await tx.wait(2);
+
+      if (receipt.status !== 1) {
+        throw new Error('Transaction failed on-chain');
+      }
+
+      // 6. Send txHash to backend for verification
+      setPurchaseStatus('verifying');
+      const result = await apiCall('/api/shop/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId: itemType,
+          txHash: tx.hash
+        })
+      });
+
+      setPurchaseStatus('done');
+
+      return {
+        success: true,
+        txHash: tx.hash,
+        ...result
+      };
+
+    } catch (error) {
+      console.error('[Purchase] Error:', error);
+      setPurchaseStatus('error');
+
+      // Handle common MetaMask errors
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        return { success: false, error: 'Transaction cancelled by user' };
+      }
+
+      return { success: false, error: error.message };
+    }
+  };
+
   // ========== BOOST PURCHASE ==========
   const handleBoostPurchase = async (boostId) => {
     if (!isAuthenticated) {
-      showNotification('⚠️ Connect wallet first!');
+      showNotification('Connect wallet first!');
       return;
     }
 
-    // Check if trying to downgrade (X2 when X5 is active)
     const requestedMultiplier = boostId === 'boost_5x' ? 5 : 2;
     if (isBoostActive && requestedMultiplier < boostMultiplier) {
-      showNotification(`⚠️ Cannot downgrade: You have X${boostMultiplier} active!`);
+      showNotification(`Cannot downgrade: You have X${boostMultiplier} active!`);
       return;
     }
 
     setIsPurchasing(true);
+    setPurchaseStatus('signing');
     try {
-      const result = await apiCall('/api/shop/activate', {
-        method: 'POST',
-        body: JSON.stringify({ itemId: boostId })
-      });
+      const result = await purchaseItem(boostId);
 
       if (result.success && result.boost) {
         setBoostMultiplier(result.boost.multiplier);
@@ -884,25 +1003,20 @@ const PyramidMemeEmpireV5 = () => {
         setBoostType(result.boost.type);
         setIsBoostActive(true);
         setShowBoostModal(false);
-
-        // Show appropriate message for upgrade vs new activation
-        if (result.upgraded) {
-          showNotification(`🎉 Boost upgraded! X${result.from} → X${result.to}`);
-        } else {
-          showNotification(`🔥 ${result.boost.multiplier}X BOOST ACTIVATED!`);
-        }
+        showNotification(`${result.boost.multiplier}X BOOST ACTIVATED!`);
         playWhoosh();
-      } else {
-        showNotification(result.message || '✅ Activated!');
+      } else if (result.success) {
+        showNotification(result.message || 'Activated!');
         setShowBoostModal(false);
+      } else {
+        showNotification(`${result.error}`);
       }
     } catch (err) {
       console.error('Purchase error:', err);
-      // Show backend error message if available
-      const errorMsg = err.message || 'Purchase failed';
-      showNotification(`❌ ${errorMsg}`);
+      showNotification(`${err.message || 'Purchase failed'}`);
     } finally {
       setIsPurchasing(false);
+      setTimeout(() => setPurchaseStatus(''), 2000);
     }
   };
 
@@ -914,98 +1028,96 @@ const PyramidMemeEmpireV5 = () => {
   // ========== ENERGY REFILL PURCHASE ==========
   const handleEnergyPurchase = async () => {
     if (!isAuthenticated) {
-      showNotification('⚠️ Connect wallet first!');
+      showNotification('Connect wallet first!');
       return;
     }
 
     if (isPremium || hasBattlePass) {
-      showNotification(hasBattlePass ? '🏆 Battle Pass users have unlimited energy!' : '👑 Premium users have unlimited energy!');
+      showNotification(hasBattlePass ? 'Battle Pass users have unlimited energy!' : 'Premium users have unlimited energy!');
       setShowEnergyModal(false);
       return;
     }
 
     setIsPurchasing(true);
+    setPurchaseStatus('signing');
     try {
-      const result = await apiCall('/api/shop/activate', {
-        method: 'POST',
-        body: JSON.stringify({ itemId: 'energy_refill' })
-      });
+      const result = await purchaseItem('energy_refill');
 
       if (result.success) {
         setEnergy(result.energy || 100);
         setShowEnergyModal(false);
-        showNotification('⚡ +100 Energy!');
+        showNotification('+100 Energy!');
         playWhoosh();
+      } else {
+        showNotification(`${result.error}`);
       }
     } catch (err) {
       console.error('Energy purchase error:', err);
-      const errorMsg = err.message || 'Purchase failed';
-      showNotification(`❌ ${errorMsg}`);
+      showNotification(`${err.message || 'Purchase failed'}`);
     } finally {
       setIsPurchasing(false);
+      setTimeout(() => setPurchaseStatus(''), 2000);
     }
   };
 
   // ========== PREMIUM PURCHASE ==========
   const handlePremiumPurchase = async () => {
     if (!isAuthenticated) {
-      showNotification('⚠️ Connect wallet first!');
+      showNotification('Connect wallet first!');
       return;
     }
 
     if (isPremium) {
-      showNotification('👑 You already have Premium!');
+      showNotification('You already have Premium!');
       setShowPremiumModal(false);
       return;
     }
 
     setIsPurchasing(true);
+    setPurchaseStatus('signing');
     try {
-      const result = await apiCall('/api/shop/activate', {
-        method: 'POST',
-        body: JSON.stringify({ itemId: 'premium' })
-      });
+      const result = await purchaseItem('premium');
 
-      if (result.success && result.isPremium) {
+      if (result.success) {
         setIsPremium(true);
-        setIsLevelCapped(false); // CRITICAL: Remove level cap when premium
+        setIsLevelCapped(false);
         setShowPremiumModal(false);
-        showNotification('👑 Premium Activated! Unlimited Power!');
+        showNotification('Premium Activated! Unlimited Power!');
         playWhoosh();
+      } else {
+        showNotification(`${result.error}`);
       }
     } catch (err) {
       console.error('Premium purchase error:', err);
-      const errorMsg = err.message || 'Purchase failed';
-      showNotification(`❌ ${errorMsg}`);
+      showNotification(`${err.message || 'Purchase failed'}`);
     } finally {
       setIsPurchasing(false);
+      setTimeout(() => setPurchaseStatus(''), 2000);
     }
   };
 
   // ========== BATTLE PASS PURCHASE ==========
   const handleBattlePassPurchase = async () => {
     if (!isAuthenticated) {
-      showNotification('⚠️ Connect wallet first!');
+      showNotification('Connect wallet first!');
       return;
     }
 
     if (hasBattlePass) {
-      showNotification('🏆 You already have Battle Pass!');
+      showNotification('You already have Battle Pass!');
       setShowBattlePassModal(false);
       return;
     }
 
     setIsPurchasing(true);
+    setPurchaseStatus('signing');
     try {
-      const result = await apiCall('/api/shop/activate', {
-        method: 'POST',
-        body: JSON.stringify({ itemId: 'battle_pass' })
-      });
+      const result = await purchaseItem('battle_pass');
 
-      if (result.success && result.hasBattlePass) {
+      if (result.success) {
         setHasBattlePass(true);
         setIsLevelCapped(false);
-        setBoostMultiplier(5); // Battle Pass gives X5 boost
+        setBoostMultiplier(5);
         setIsBoostActive(true);
         setBoostType('battle_pass');
         setBattlePassInfo({ expiresAt: result.expiresAt });
@@ -1013,19 +1125,20 @@ const PyramidMemeEmpireV5 = () => {
           setReferralCode(result.referralCode);
         }
         setShowBattlePassModal(false);
-        showNotification('🏆 BATTLE PASS ACTIVATED!');
+        showNotification('BATTLE PASS ACTIVATED!');
         playWhoosh();
 
-        // Trigger celebration
         setShowFireworks(true);
         setTimeout(() => setShowFireworks(false), 3000);
+      } else {
+        showNotification(`${result.error}`);
       }
     } catch (err) {
       console.error('Battle Pass purchase error:', err);
-      const errorMsg = err.message || 'Purchase failed';
-      showNotification(`❌ ${errorMsg}`);
+      showNotification(`${err.message || 'Purchase failed'}`);
     } finally {
       setIsPurchasing(false);
+      setTimeout(() => setPurchaseStatus(''), 2000);
     }
   };
 
@@ -1521,7 +1634,15 @@ const PyramidMemeEmpireV5 = () => {
                   boxShadow: isPurchasing ? 'none' : `0 0 30px ${selectedBoost === 'boost_5x' ? 'rgba(255,50,50,0.5)' : 'rgba(255,165,0,0.5)'}`,
                 }}
               >
-                {isPurchasing ? 'ACTIVATING...' : 'ACTIVATE BOOST (DEMO)'}
+                {isPurchasing
+                  ? purchaseStatus === 'signing' ? 'SIGN IN WALLET...'
+                  : purchaseStatus === 'confirming' ? 'CONFIRMING TX...'
+                  : purchaseStatus === 'verifying' ? 'VERIFYING...'
+                  : purchaseStatus === 'done' ? 'DONE!'
+                  : purchaseStatus === 'error' ? 'FAILED'
+                  : 'PROCESSING...'
+                  : `ACTIVATE BOOST - ${selectedBoost === 'boost_5x' ? '$1.50' : '$0.50'} USDC`
+                }
               </button>
 
               <div style={{
@@ -1530,7 +1651,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Demo mode • No real payment required
+                Pays with USDC on Base Network
               </div>
             </div>
           </div>
@@ -1654,7 +1775,15 @@ const PyramidMemeEmpireV5 = () => {
                   boxShadow: isPurchasing ? 'none' : '0 0 30px rgba(0,255,0,0.5)',
                 }}
               >
-                {isPurchasing ? 'REFILLING...' : 'REFILL ENERGY (DEMO)'}
+                {isPurchasing
+                  ? purchaseStatus === 'signing' ? 'SIGN IN WALLET...'
+                  : purchaseStatus === 'confirming' ? 'CONFIRMING TX...'
+                  : purchaseStatus === 'verifying' ? 'VERIFYING...'
+                  : purchaseStatus === 'done' ? 'DONE!'
+                  : purchaseStatus === 'error' ? 'FAILED'
+                  : 'PROCESSING...'
+                  : 'REFILL ENERGY - $0.25 USDC'
+                }
               </button>
 
               <div style={{
@@ -1663,7 +1792,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Demo mode • No real payment required
+                Pays with USDC on Base Network
               </div>
             </div>
           </div>
@@ -1793,7 +1922,15 @@ const PyramidMemeEmpireV5 = () => {
                   boxShadow: isPurchasing ? 'none' : '0 0 30px rgba(255,215,0,0.5)',
                 }}
               >
-                {isPurchasing ? 'ACTIVATING...' : 'ACTIVATE PREMIUM (DEMO)'}
+                {isPurchasing
+                  ? purchaseStatus === 'signing' ? 'SIGN IN WALLET...'
+                  : purchaseStatus === 'confirming' ? 'CONFIRMING TX...'
+                  : purchaseStatus === 'verifying' ? 'VERIFYING...'
+                  : purchaseStatus === 'done' ? 'DONE!'
+                  : purchaseStatus === 'error' ? 'FAILED'
+                  : 'PROCESSING...'
+                  : 'ACTIVATE PREMIUM - $2.00 USDC'
+                }
               </button>
 
               <div style={{
@@ -1802,7 +1939,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Demo mode • No real payment required
+                Pays with USDC on Base Network
               </div>
             </div>
           </div>
@@ -1941,7 +2078,15 @@ const PyramidMemeEmpireV5 = () => {
                   boxShadow: isPurchasing ? 'none' : '0 0 40px rgba(255,0,255,0.6)',
                 }}
               >
-                {isPurchasing ? 'ACTIVATING...' : 'GET BATTLE PASS (DEMO)'}
+                {isPurchasing
+                  ? purchaseStatus === 'signing' ? 'SIGN IN WALLET...'
+                  : purchaseStatus === 'confirming' ? 'CONFIRMING TX...'
+                  : purchaseStatus === 'verifying' ? 'VERIFYING...'
+                  : purchaseStatus === 'done' ? 'DONE!'
+                  : purchaseStatus === 'error' ? 'FAILED'
+                  : 'PROCESSING...'
+                  : 'GET BATTLE PASS - $5.00 USDC'
+                }
               </button>
 
               <div style={{
@@ -1950,7 +2095,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Demo mode • No real payment required
+                Pays with USDC on Base Network
               </div>
             </div>
           </div>

@@ -152,8 +152,34 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Run safe migrations for new columns
+const runMigrations = async () => {
+  const db = require('./config/database');
+  const migrations = [
+    'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS chain_id INTEGER DEFAULT 8453',
+    'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS block_number BIGINT',
+  ];
+
+  for (const sql of migrations) {
+    try {
+      await db.query(sql);
+    } catch (err) {
+      // Column might already exist or table might not exist yet - that's ok
+      console.log('[Migration] Skipped:', err.message);
+    }
+  }
+  console.log('[Migration] Transactions table columns verified');
+};
+
 // Initialize database tables and start server
 const startServer = async () => {
+  // Run safe migrations
+  try {
+    await runMigrations();
+  } catch (err) {
+    console.error('[Migration] Error:', err.message);
+  }
+
   // Check if tables exist first
   try {
     const tablesStatus = await Quest.tablesExist();

@@ -48,6 +48,18 @@ class Transaction {
     return result.rows[0];
   }
 
+  // Update on-chain details (chain_id, block_number)
+  static async updateOnChainDetails(txHash, details) {
+    const result = await db.query(
+      `UPDATE transactions
+       SET chain_id = $1, block_number = $2
+       WHERE tx_hash = $3
+       RETURNING *`,
+      [details.chain_id, details.block_number, txHash.toLowerCase()]
+    );
+    return result.rows[0];
+  }
+
   // Verify transaction on-chain
   static async verifyOnChain(txHash) {
     try {
