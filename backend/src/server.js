@@ -32,6 +32,10 @@ app.use(express.json());
 // Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  if (req.method === 'POST') {
+    console.log('  Content-Type:', req.headers['content-type']);
+    console.log('  Body:', JSON.stringify(req.body));
+  }
   next();
 });
 

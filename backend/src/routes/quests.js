@@ -83,11 +83,20 @@ router.get('/progress/:questId', async (req, res) => {
 router.post('/complete',
   body('questId').isString().notEmpty(),
   async (req, res) => {
+    // Debug: log raw body
+    console.log('[Quests] Raw request body:', req.body);
+    console.log('[Quests] Body type:', typeof req.body);
+    console.log('[Quests] questId value:', req.body?.questId, 'type:', typeof req.body?.questId);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('[Quests] Validation errors:', errors.array());
       const errorMessages = errors.array().map(e => e.msg).join(', ');
-      return res.status(400).json({ error: `Validation failed: ${errorMessages}`, errors: errors.array() });
+      return res.status(400).json({
+        error: `Validation failed: ${errorMessages}`,
+        errors: errors.array(),
+        receivedBody: req.body
+      });
     }
 
     const { questId } = req.body;
