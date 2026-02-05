@@ -47,9 +47,16 @@ const apiCall = async (endpoint, options = {}) => {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  console.log(`[API] ${options.method || 'GET'} ${endpoint}`, options.body ? JSON.parse(options.body) : '');
+
   const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'API error');
+
+  if (!response.ok) {
+    console.error(`[API] Error ${response.status}:`, data);
+    throw new Error(data.error || data.message || 'API error');
+  }
+
   return data;
 };
 
@@ -775,16 +782,14 @@ const PyramidMemeEmpireV5 = () => {
       });
 
       if (result.success) {
-        // Update local state
+        // Update local state - no need to reload all quests
         setQuests(prev => prev.map(q =>
           q.quest_id === questId ? { ...q, isCompleted: true } : q
         ));
         setTotalQuestXP(result.totalQuestXP);
         showNotification(`🎉 +${result.xpEarned} XP!`);
         playWhoosh();
-
-        // Reload quests to get fresh data
-        await loadQuests();
+        // Don't call loadQuests() - it causes all quests to show loading
       }
     } catch (err) {
       console.error('Complete quest error:', err);

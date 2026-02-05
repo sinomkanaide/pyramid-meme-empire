@@ -85,25 +85,33 @@ router.post('/complete',
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      console.log('[Quests] Validation errors:', errors.array());
+      const errorMessages = errors.array().map(e => e.msg).join(', ');
+      return res.status(400).json({ error: `Validation failed: ${errorMessages}`, errors: errors.array() });
     }
 
     const { questId } = req.body;
+    console.log(`[Quests] Completing quest ${questId} for user ${req.user.id}`);
 
     try {
       // Check if quest exists and is active
       const quest = await Quest.findByQuestId(questId);
       if (!quest) {
+        console.log(`[Quests] Quest not found: ${questId}`);
         return res.status(404).json({ error: 'Quest not found' });
       }
 
+      console.log(`[Quests] Found quest: ${quest.title}, active: ${quest.is_active}, verification: ${quest.verification_method}`);
+
       if (!quest.is_active) {
+        console.log(`[Quests] Quest inactive: ${questId}`);
         return res.status(400).json({ error: 'Quest is no longer active' });
       }
 
       // Check if already completed
       const isCompleted = await Quest.isCompleted(req.user.id, questId);
       if (isCompleted) {
+        console.log(`[Quests] Quest already completed: ${questId}`);
         return res.status(400).json({
           error: 'Quest already completed',
           alreadyCompleted: true
@@ -113,6 +121,7 @@ router.post('/complete',
       // For internal verification quests, check if user meets requirements
       if (quest.verification_method === 'internal') {
         const canComplete = await Quest.canComplete(req.user.id, questId);
+        console.log(`[Quests] Internal quest requirements:`, canComplete);
         if (!canComplete.canComplete) {
           return res.status(400).json({
             error: 'Requirements not met',
