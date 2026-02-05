@@ -836,6 +836,16 @@ const PyramidMemeEmpireV5 = () => {
 
   // Verify and complete a quest (called by VERIFY button)
   const verifyQuest = async (quest) => {
+    console.log('[Quest] verifyQuest called with:', quest);
+    console.log('[Quest] quest.quest_id:', quest?.quest_id);
+    console.log('[Quest] quest keys:', quest ? Object.keys(quest) : 'quest is null/undefined');
+
+    if (!quest) {
+      console.error('[Quest] quest object is undefined!');
+      showNotification('❌ Error: Invalid quest');
+      return;
+    }
+
     if (quest.isCompleted) return;
 
     // For internal verification, check requirements first

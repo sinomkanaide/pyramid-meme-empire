@@ -61,6 +61,21 @@ app.post('/api/test-body', (req, res) => {
   });
 });
 
+// Public endpoint to check quest data format (no auth)
+app.get('/api/diagnostics/quests-sample', async (req, res) => {
+  try {
+    const db = require('./config/database');
+    const result = await db.query('SELECT * FROM quests LIMIT 2');
+    res.json({
+      questCount: result.rows.length,
+      sampleQuests: result.rows,
+      questKeys: result.rows[0] ? Object.keys(result.rows[0]) : []
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Database diagnostics endpoint
 app.get('/api/diagnostics/tables', async (req, res) => {
   try {
