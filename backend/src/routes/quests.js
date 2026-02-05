@@ -80,26 +80,22 @@ router.get('/progress/:questId', async (req, res) => {
 });
 
 // POST /quests/complete - Complete a quest
-router.post('/complete',
-  body('questId').isString().notEmpty(),
-  async (req, res) => {
+router.post('/complete', async (req, res) => {
     // Debug: log raw body
     console.log('[Quests] Raw request body:', req.body);
-    console.log('[Quests] Body type:', typeof req.body);
     console.log('[Quests] questId value:', req.body?.questId, 'type:', typeof req.body?.questId);
 
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.log('[Quests] Validation errors:', errors.array());
-      const errorMessages = errors.array().map(e => e.msg).join(', ');
+    const { questId } = req.body;
+
+    // Manual validation (simpler than express-validator)
+    if (!questId || typeof questId !== 'string' || questId.trim() === '') {
+      console.log('[Quests] Invalid questId:', questId);
       return res.status(400).json({
-        error: `Validation failed: ${errorMessages}`,
-        errors: errors.array(),
+        error: 'questId is required and must be a non-empty string',
         receivedBody: req.body
       });
     }
 
-    const { questId } = req.body;
     console.log(`[Quests] Completing quest ${questId} for user ${req.user.id}`);
 
     try {
