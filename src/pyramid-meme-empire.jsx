@@ -1002,6 +1002,11 @@ const PyramidMemeEmpireV5 = () => {
         return { success: false, error: 'Transaction cancelled by user' };
       }
 
+      // Handle insufficient gas (ETH for gas fees)
+      if (error.message?.includes('insufficient funds for gas') || error.code === 'INSUFFICIENT_FUNDS') {
+        return { success: false, error: 'Not enough ETH for gas fees. You need a small amount of ETH on Base.' };
+      }
+
       return { success: false, error: error.message };
     }
   };
@@ -1036,14 +1041,16 @@ const PyramidMemeEmpireV5 = () => {
         showNotification(result.message || 'Activated!');
         setShowBoostModal(false);
       } else {
-        showNotification(`${result.error}`);
+        setShowBoostModal(false);
+        showNotification(result.error);
       }
     } catch (err) {
       console.error('Purchase error:', err);
-      showNotification(`${err.message || 'Purchase failed'}`);
+      setShowBoostModal(false);
+      showNotification(err.message || 'Purchase failed');
     } finally {
       setIsPurchasing(false);
-      setTimeout(() => setPurchaseStatus(''), 2000);
+      setPurchaseStatus('');
     }
   };
 
@@ -1076,14 +1083,16 @@ const PyramidMemeEmpireV5 = () => {
         showNotification('+100 Energy!');
         playWhoosh();
       } else {
-        showNotification(`${result.error}`);
+        setShowEnergyModal(false);
+        showNotification(result.error);
       }
     } catch (err) {
       console.error('Energy purchase error:', err);
-      showNotification(`${err.message || 'Purchase failed'}`);
+      setShowEnergyModal(false);
+      showNotification(err.message || 'Purchase failed');
     } finally {
       setIsPurchasing(false);
-      setTimeout(() => setPurchaseStatus(''), 2000);
+      setPurchaseStatus('');
     }
   };
 
@@ -1112,14 +1121,16 @@ const PyramidMemeEmpireV5 = () => {
         showNotification('Premium Activated! Unlimited Power!');
         playWhoosh();
       } else {
-        showNotification(`${result.error}`);
+        setShowPremiumModal(false);
+        showNotification(result.error);
       }
     } catch (err) {
       console.error('Premium purchase error:', err);
-      showNotification(`${err.message || 'Purchase failed'}`);
+      setShowPremiumModal(false);
+      showNotification(err.message || 'Purchase failed');
     } finally {
       setIsPurchasing(false);
-      setTimeout(() => setPurchaseStatus(''), 2000);
+      setPurchaseStatus('');
     }
   };
 
@@ -1158,14 +1169,16 @@ const PyramidMemeEmpireV5 = () => {
         setShowFireworks(true);
         setTimeout(() => setShowFireworks(false), 3000);
       } else {
-        showNotification(`${result.error}`);
+        setShowBattlePassModal(false);
+        showNotification(result.error);
       }
     } catch (err) {
       console.error('Battle Pass purchase error:', err);
-      showNotification(`${err.message || 'Purchase failed'}`);
+      setShowBattlePassModal(false);
+      showNotification(err.message || 'Purchase failed');
     } finally {
       setIsPurchasing(false);
-      setTimeout(() => setPurchaseStatus(''), 2000);
+      setPurchaseStatus('');
     }
   };
 
