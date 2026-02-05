@@ -130,10 +130,13 @@ const PyramidMemeEmpireV5 = () => {
   const [purchaseStatus, setPurchaseStatus] = useState(''); // '', 'signing', 'confirming', 'verifying', 'done', 'error'
   const [isTapping, setIsTapping] = useState(false);
   const tapInFlight = useRef(false);
+  const connectedProviderRef = useRef(null);
   const [xpProgress, setXpProgress] = useState({ current: 0, needed: 100, percent: 0 });
   const [referralStats, setReferralStats] = useState({ total: 0, verified: 0, bonusPercent: 0 });
   const [battlePassInfo, setBattlePassInfo] = useState(null);
   const [referralCode, setReferralCode] = useState('');
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [availableWallets, setAvailableWallets] = useState([]);
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -218,49 +221,66 @@ const PyramidMemeEmpireV5 = () => {
   }, [walletAddress]);
 
   // ========== WALLET ==========
-  // Get the best available wallet provider
-  const getWalletProvider = () => {
-    // Check for Phantom FIRST (it also sets isMetaMask = true for compatibility)
-    if (window.phantom?.ethereum) {
-      return { provider: window.phantom.ethereum, name: 'Phantom' };
-    }
+  // Detect all available wallet providers
+  const detectWallets = () => {
+    const wallets = [];
 
-    // Check for multiple providers (when user has multiple wallets)
+    // Check providers array (when multiple extensions installed)
     if (window.ethereum?.providers?.length) {
-      // Try to find MetaMask specifically
-      const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask && !p.isPhantom);
-      if (metaMaskProvider) {
-        return { provider: metaMaskProvider, name: 'MetaMask' };
+      for (const p of window.ethereum.providers) {
+        if (p.isMetaMask && !p.isPhantom) {
+          wallets.push({ provider: p, name: 'MetaMask', icon: '🦊' });
+        }
+        if (p.isPhantom) {
+          wallets.push({ provider: p, name: 'Phantom', icon: '👻' });
+        }
       }
-      // Or just use the first provider
-      return { provider: window.ethereum.providers[0], name: 'Wallet' };
     }
 
-    // Check for MetaMask
-    if (window.ethereum?.isMetaMask) {
-      return { provider: window.ethereum, name: 'MetaMask' };
+    // If no providers array, check individually
+    if (wallets.length === 0) {
+      // Check Phantom
+      if (window.phantom?.ethereum) {
+        wallets.push({ provider: window.phantom.ethereum, name: 'Phantom', icon: '👻' });
+      }
+      // Check MetaMask (but not if it's actually Phantom pretending)
+      if (window.ethereum?.isMetaMask && !window.ethereum?.isPhantom) {
+        wallets.push({ provider: window.ethereum, name: 'MetaMask', icon: '🦊' });
+      }
+      // Fallback: any ethereum provider
+      if (wallets.length === 0 && window.ethereum) {
+        wallets.push({ provider: window.ethereum, name: 'Wallet', icon: '💳' });
+      }
     }
 
-    // Fallback to any available ethereum provider
-    if (window.ethereum) {
-      return { provider: window.ethereum, name: 'Wallet' };
-    }
-
-    return null;
+    return wallets;
   };
 
-  const connectWallet = async () => {
-    setIsConnecting(true);
-    try {
-      // Get wallet provider
-      const walletInfo = getWalletProvider();
+  const connectWallet = async (selectedProvider = null) => {
+    // If no provider selected, detect and possibly show chooser
+    if (!selectedProvider) {
+      const wallets = detectWallets();
 
-      if (!walletInfo) {
-        showNotification('⚠️ INSTALL METAMASK OR PHANTOM');
+      if (wallets.length === 0) {
+        showNotification('INSTALL METAMASK OR PHANTOM');
         return;
       }
 
-      const { provider, name } = walletInfo;
+      // Multiple wallets? Show selection modal
+      if (wallets.length > 1) {
+        setAvailableWallets(wallets);
+        setShowWalletModal(true);
+        return;
+      }
+
+      // Only one wallet, use it directly
+      selectedProvider = wallets[0];
+    }
+
+    setShowWalletModal(false);
+    setIsConnecting(true);
+    try {
+      const { provider, name } = selectedProvider;
       console.log(`Connecting with ${name}...`);
 
       // Request accounts with timeout
@@ -326,6 +346,7 @@ const PyramidMemeEmpireV5 = () => {
 
       const wallet = accounts[0];
       setWalletAddress(wallet);
+      connectedProviderRef.current = provider; // Save provider for purchases
 
       // Authenticate with backend
       try {
@@ -889,11 +910,12 @@ const PyramidMemeEmpireV5 = () => {
   const purchaseItem = async (itemType) => {
     try {
       // 1. Check wallet is connected
-      if (!window.ethereum) {
-        throw new Error('Please install MetaMask');
+      const walletProvider = connectedProviderRef.current || window.ethereum;
+      if (!walletProvider) {
+        throw new Error('No wallet connected. Please reconnect.');
       }
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(walletProvider);
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
@@ -901,13 +923,13 @@ const PyramidMemeEmpireV5 = () => {
       const network = await provider.getNetwork();
       if (Number(network.chainId) !== BASE_CHAIN_ID) {
         try {
-          await window.ethereum.request({
+          await walletProvider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: '0x2105' }]
           });
         } catch (switchError) {
           if (switchError.code === 4902) {
-            await window.ethereum.request({
+            await walletProvider.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: '0x2105',
@@ -1500,6 +1522,98 @@ const PyramidMemeEmpireV5 = () => {
               }}>
                 One-time payment • Forever access
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Wallet Selection Modal */}
+        {showWalletModal && (
+          <div
+            onClick={() => setShowWalletModal(false)}
+            style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.95)',
+              zIndex: 10002,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                border: '3px solid #00FF00',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 340,
+                width: '100%',
+                boxShadow: '0 0 50px rgba(0,255,0,0.3)',
+              }}
+            >
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <div style={{ fontSize: 16, color: '#00FF00', fontWeight: 'bold', fontFamily: 'inherit' }}>
+                  SELECT WALLET
+                </div>
+                <div style={{ fontSize: 9, color: '#888', marginTop: 8, fontFamily: 'inherit' }}>
+                  Choose which wallet to connect
+                </div>
+              </div>
+
+              {availableWallets.map((wallet, index) => (
+                <button
+                  key={index}
+                  onClick={() => connectWallet(wallet)}
+                  style={{
+                    width: '100%',
+                    padding: 16,
+                    marginBottom: 12,
+                    background: 'linear-gradient(135deg, #1e293b, #334155)',
+                    border: '2px solid #334155',
+                    borderRadius: 12,
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.border = '2px solid #00FF00';
+                    e.target.style.boxShadow = '0 0 20px rgba(0,255,0,0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.border = '2px solid #334155';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <span style={{ fontSize: 24 }}>{wallet.icon}</span>
+                  <span>{wallet.name}</span>
+                </button>
+              ))}
+
+              <button
+                onClick={() => setShowWalletModal(false)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  marginTop: 4,
+                  background: 'transparent',
+                  border: '1px solid #444',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 11,
+                  color: '#666',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
