@@ -42,11 +42,19 @@ class PaymentService {
         return { valid: false, error: 'Transaction failed on-chain' };
       }
 
-      // 3. Verify confirmations (minimum 2)
-      const currentBlock = await this.provider.getBlockNumber();
-      const confirmations = currentBlock - receipt.blockNumber;
-      if (confirmations < 2) {
-        return { valid: false, error: `Only ${confirmations} confirmations, need at least 2` };
+      // 3. Verify confirmations (minimum 1, Base L2 has ~2s blocks)
+      //    Frontend already waits for 2 confirmations before calling backend.
+      //    Backend RPC may lag 1 block behind, so we accept 1 with retry.
+      let confirmations = 0;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const currentBlock = await this.provider.getBlockNumber();
+        confirmations = currentBlock - receipt.blockNumber;
+        if (confirmations >= 1) break;
+        // Wait 3 seconds and retry
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+      if (confirmations < 1) {
+        return { valid: false, error: `Only ${confirmations} confirmations, need at least 1` };
       }
 
       // 4. Verify tx is to the USDC contract
