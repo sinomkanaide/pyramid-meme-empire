@@ -11,8 +11,31 @@ router.use(authenticateToken);
 // GET /quests - Get all quests with user status
 router.get('/', async (req, res) => {
   try {
+    console.log(`[Quests] Getting quests for user ${req.user.id}`);
+
+    // First check if tables exist
+    const tablesStatus = await Quest.tablesExist();
+    console.log(`[Quests] Tables status:`, tablesStatus);
+
+    if (!tablesStatus.quests || !tablesStatus.quest_completions) {
+      console.log('[Quests] Tables missing, attempting to initialize...');
+      try {
+        await Quest.initializeTables();
+        console.log('[Quests] Tables initialized successfully');
+      } catch (initError) {
+        console.error('[Quests] Failed to initialize tables:', initError);
+        return res.status(500).json({
+          error: 'Quest tables not initialized',
+          details: initError.message,
+          tablesStatus
+        });
+      }
+    }
+
     const quests = await Quest.getAllWithUserStatus(req.user.id);
     const totalQuestXP = await Quest.getTotalQuestXP(req.user.id);
+
+    console.log(`[Quests] Found ${quests.length} quests, total XP: ${totalQuestXP}`);
 
     res.json({
       quests,
@@ -21,8 +44,13 @@ router.get('/', async (req, res) => {
       totalCount: quests.length
     });
   } catch (error) {
-    console.error('Get quests error:', error);
-    res.status(500).json({ error: 'Failed to get quests' });
+    console.error('[Quests] Get quests error:', error);
+    console.error('[Quests] Error stack:', error.stack);
+    res.status(500).json({
+      error: 'Failed to get quests',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      errorType: error.constructor.name
+    });
   }
 });
 

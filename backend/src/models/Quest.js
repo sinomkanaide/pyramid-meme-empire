@@ -85,9 +85,39 @@ const INITIAL_QUESTS = [
 ];
 
 class Quest {
+  // Check if tables exist
+  static async tablesExist() {
+    try {
+      const questsTable = await db.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public'
+          AND table_name = 'quests'
+        )
+      `);
+      const completionsTable = await db.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public'
+          AND table_name = 'quest_completions'
+        )
+      `);
+      return {
+        quests: questsTable.rows[0].exists,
+        quest_completions: completionsTable.rows[0].exists
+      };
+    } catch (error) {
+      console.error('Error checking tables:', error);
+      return { quests: false, quest_completions: false, error: error.message };
+    }
+  }
+
   // Initialize quests table and seed data
   static async initializeTables() {
+    console.log('Starting quest tables initialization...');
+
     // Create quests table
+    console.log('Creating quests table...');
     await db.query(`
       CREATE TABLE IF NOT EXISTS quests (
         id SERIAL PRIMARY KEY,
@@ -104,8 +134,10 @@ class Quest {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    console.log('Quests table created/verified');
 
     // Create quest_completions table
+    console.log('Creating quest_completions table...');
     await db.query(`
       CREATE TABLE IF NOT EXISTS quest_completions (
         id SERIAL PRIMARY KEY,
@@ -117,8 +149,10 @@ class Quest {
         UNIQUE(user_id, quest_id)
       )
     `);
+    console.log('Quest_completions table created/verified');
 
     // Create indexes
+    console.log('Creating indexes...');
     await db.query(`
       CREATE INDEX IF NOT EXISTS idx_quest_completions_user
       ON quest_completions(user_id)
@@ -128,46 +162,58 @@ class Quest {
       CREATE INDEX IF NOT EXISTS idx_quests_quest_id
       ON quests(quest_id)
     `);
+    console.log('Indexes created/verified');
 
     // Seed initial quests
+    console.log('Seeding initial quests...');
     for (let i = 0; i < INITIAL_QUESTS.length; i++) {
       const quest = INITIAL_QUESTS[i];
-      await db.query(`
-        INSERT INTO quests (quest_id, title, description, type, verification_method, xp_reward, external_url, icon, sort_order)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (quest_id) DO UPDATE SET
-          title = EXCLUDED.title,
-          description = EXCLUDED.description,
-          type = EXCLUDED.type,
-          verification_method = EXCLUDED.verification_method,
-          xp_reward = EXCLUDED.xp_reward,
-          external_url = EXCLUDED.external_url,
-          icon = EXCLUDED.icon,
-          sort_order = EXCLUDED.sort_order
-      `, [
-        quest.quest_id,
-        quest.title,
-        quest.description,
-        quest.type,
-        quest.verification_method,
-        quest.xp_reward,
-        quest.external_url,
-        quest.icon,
-        i
-      ]);
+      try {
+        await db.query(`
+          INSERT INTO quests (quest_id, title, description, type, verification_method, xp_reward, external_url, icon, sort_order)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (quest_id) DO UPDATE SET
+            title = EXCLUDED.title,
+            description = EXCLUDED.description,
+            type = EXCLUDED.type,
+            verification_method = EXCLUDED.verification_method,
+            xp_reward = EXCLUDED.xp_reward,
+            external_url = EXCLUDED.external_url,
+            icon = EXCLUDED.icon,
+            sort_order = EXCLUDED.sort_order
+        `, [
+          quest.quest_id,
+          quest.title,
+          quest.description,
+          quest.type,
+          quest.verification_method,
+          quest.xp_reward,
+          quest.external_url,
+          quest.icon,
+          i
+        ]);
+        console.log(`  Seeded quest: ${quest.quest_id}`);
+      } catch (seedError) {
+        console.error(`  Error seeding quest ${quest.quest_id}:`, seedError.message);
+      }
     }
 
-    console.log('Quests tables initialized and seeded');
+    console.log('Quests tables initialized and seeded successfully');
   }
 
   // Get all active quests
   static async getAllActive() {
-    const result = await db.query(`
-      SELECT * FROM quests
-      WHERE is_active = true
-      ORDER BY sort_order ASC
-    `);
-    return result.rows;
+    try {
+      const result = await db.query(`
+        SELECT * FROM quests
+        WHERE is_active = true
+        ORDER BY sort_order ASC
+      `);
+      return result.rows;
+    } catch (error) {
+      console.error('getAllActive error:', error.message);
+      throw new Error(`Failed to get quests: ${error.message}`);
+    }
   }
 
   // Get quest by ID
@@ -181,14 +227,20 @@ class Quest {
 
   // Get user's completed quests
   static async getUserCompletions(userId) {
-    const result = await db.query(`
-      SELECT qc.*, q.title, q.type, q.icon
-      FROM quest_completions qc
-      JOIN quests q ON qc.quest_id = q.quest_id
-      WHERE qc.user_id = $1
-      ORDER BY qc.completed_at DESC
-    `, [userId]);
-    return result.rows;
+    try {
+      const result = await db.query(`
+        SELECT qc.*, q.title, q.type, q.icon
+        FROM quest_completions qc
+        JOIN quests q ON qc.quest_id = q.quest_id
+        WHERE qc.user_id = $1
+        ORDER BY qc.completed_at DESC
+      `, [userId]);
+      return result.rows;
+    } catch (error) {
+      console.error('getUserCompletions error:', error.message);
+      // Return empty array if table doesn't exist or other error
+      return [];
+    }
   }
 
   // Check if user has completed a quest
@@ -225,27 +277,38 @@ class Quest {
 
   // Get user's progress for milestone quests
   static async getUserProgress(userId) {
+    let progress = { level: 1, total_taps: 0, bricks: 0 };
+    let verifiedReferrals = 0;
+
     // Get user's level and total taps
-    const progressResult = await db.query(`
-      SELECT gp.level, gp.total_taps, gp.bricks
-      FROM game_progress gp
-      WHERE gp.user_id = $1
-    `, [userId]);
+    try {
+      const progressResult = await db.query(`
+        SELECT gp.level, gp.total_taps, gp.bricks
+        FROM game_progress gp
+        WHERE gp.user_id = $1
+      `, [userId]);
+      progress = progressResult.rows[0] || progress;
+    } catch (error) {
+      console.error('getUserProgress - game_progress error:', error.message);
+    }
 
     // Get verified referrals count
-    const referralsResult = await db.query(`
-      SELECT COUNT(*) as verified_count
-      FROM referrals
-      WHERE referrer_id = $1 AND is_activated = true
-    `, [userId]);
-
-    const progress = progressResult.rows[0] || { level: 1, total_taps: 0, bricks: 0 };
-    const verifiedReferrals = parseInt(referralsResult.rows[0]?.verified_count || 0);
+    try {
+      const referralsResult = await db.query(`
+        SELECT COUNT(*) as verified_count
+        FROM referrals
+        WHERE referrer_id = $1 AND is_activated = true
+      `, [userId]);
+      verifiedReferrals = parseInt(referralsResult.rows[0]?.verified_count || 0);
+    } catch (error) {
+      console.error('getUserProgress - referrals error:', error.message);
+      // Table might not exist or have different structure, use 0
+    }
 
     return {
-      level: progress.level,
-      totalTaps: progress.total_taps,
-      totalBricks: progress.bricks,
+      level: progress.level || 1,
+      totalTaps: progress.total_taps || 0,
+      totalBricks: progress.bricks || 0,
       verifiedReferrals
     };
   }
@@ -327,12 +390,17 @@ class Quest {
 
   // Get user's total XP from quests
   static async getTotalQuestXP(userId) {
-    const result = await db.query(`
-      SELECT COALESCE(SUM(xp_earned), 0) as total_xp
-      FROM quest_completions
-      WHERE user_id = $1
-    `, [userId]);
-    return parseInt(result.rows[0]?.total_xp || 0);
+    try {
+      const result = await db.query(`
+        SELECT COALESCE(SUM(xp_earned), 0) as total_xp
+        FROM quest_completions
+        WHERE user_id = $1
+      `, [userId]);
+      return parseInt(result.rows[0]?.total_xp || 0);
+    } catch (error) {
+      console.error('getTotalQuestXP error:', error.message);
+      return 0; // Return 0 if table doesn't exist
+    }
   }
 }
 

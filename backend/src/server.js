@@ -44,6 +44,57 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Database diagnostics endpoint
+app.get('/api/diagnostics/tables', async (req, res) => {
+  try {
+    const tablesStatus = await Quest.tablesExist();
+
+    // Count quests if table exists
+    let questCount = 0;
+    if (tablesStatus.quests) {
+      const db = require('./config/database');
+      const result = await db.query('SELECT COUNT(*) as count FROM quests');
+      questCount = parseInt(result.rows[0].count);
+    }
+
+    res.json({
+      status: 'ok',
+      tables: tablesStatus,
+      questCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Diagnostics error:', error);
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Manual table initialization endpoint (for debugging)
+app.post('/api/diagnostics/init-quests', async (req, res) => {
+  try {
+    console.log('Manual quest table initialization requested');
+    await Quest.initializeTables();
+    const tablesStatus = await Quest.tablesExist();
+
+    res.json({
+      status: 'ok',
+      message: 'Quest tables initialized',
+      tables: tablesStatus
+    });
+  } catch (error) {
+    console.error('Manual initialization error:', error);
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
@@ -67,13 +118,33 @@ app.use((err, req, res, next) => {
 
 // Initialize database tables and start server
 const startServer = async () => {
+  // Check if tables exist first
   try {
-    // Initialize quest tables
-    await Quest.initializeTables();
-    console.log('Quest tables initialized');
+    const tablesStatus = await Quest.tablesExist();
+    console.log('Quest tables status:', tablesStatus);
+
+    if (!tablesStatus.quests || !tablesStatus.quest_completions) {
+      console.log('Quest tables missing, initializing...');
+      await Quest.initializeTables();
+      console.log('Quest tables initialized successfully');
+    } else {
+      console.log('Quest tables already exist, skipping initialization');
+      // Verify quests are seeded
+      const db = require('./config/database');
+      const result = await db.query('SELECT COUNT(*) as count FROM quests');
+      const questCount = parseInt(result.rows[0].count);
+      console.log(`Found ${questCount} quests in database`);
+
+      if (questCount === 0) {
+        console.log('No quests found, re-seeding...');
+        await Quest.initializeTables();
+      }
+    }
   } catch (error) {
     console.error('Failed to initialize quest tables:', error);
-    // Continue anyway - tables might already exist
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    // Continue anyway - we'll try to initialize on first request
   }
 
   app.listen(PORT, () => {
