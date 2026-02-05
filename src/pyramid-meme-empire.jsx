@@ -257,6 +257,11 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   const connectWallet = async (selectedProvider = null) => {
+    // Guard: if called from onClick, the event object gets passed - ignore it
+    if (selectedProvider && !selectedProvider.provider) {
+      selectedProvider = null;
+    }
+
     // If no provider selected, detect and possibly show chooser
     if (!selectedProvider) {
       const wallets = detectWallets();
@@ -2223,7 +2228,7 @@ const PyramidMemeEmpireV5 = () => {
               {walletAddress.slice(0, 4)}...{walletAddress.slice(-3)}
             </div>
           ) : (
-            <button onClick={connectWallet} disabled={isConnecting} className="connect-btn-small">
+            <button onClick={() => connectWallet()} disabled={isConnecting} className="connect-btn-small">
               {isConnecting ? 'CONNECTING...' : 'CONNECT'}
             </button>
           )}
