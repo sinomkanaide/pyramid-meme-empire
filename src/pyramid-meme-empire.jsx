@@ -279,9 +279,9 @@ const PyramidMemeEmpireV5 = () => {
 
     setShowWalletModal(false);
     setIsConnecting(true);
+    const { provider, name } = selectedProvider;
+    console.log(`Connecting with ${name}...`);
     try {
-      const { provider, name } = selectedProvider;
-      console.log(`Connecting with ${name}...`);
 
       // Request accounts with timeout
       let accounts;
