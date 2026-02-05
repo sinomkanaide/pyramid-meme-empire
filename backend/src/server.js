@@ -48,6 +48,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Test endpoint to verify body parsing (no auth)
+app.post('/api/test-body', (req, res) => {
+  console.log('[Test] Body received:', req.body);
+  res.json({
+    received: req.body,
+    hasQuestId: !!req.body?.questId,
+    questIdType: typeof req.body?.questId
+  });
+});
+
 // Database diagnostics endpoint
 app.get('/api/diagnostics/tables', async (req, res) => {
   try {
