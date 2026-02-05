@@ -769,16 +769,27 @@ const PyramidMemeEmpireV5 = () => {
 
   // Complete a quest
   const completeQuest = async (questId) => {
+    console.log('[Quest] completeQuest called with:', questId, 'type:', typeof questId);
+
     if (!isAuthenticated) {
       showNotification('⚠️ Connect wallet first!');
       return;
     }
 
+    if (!questId) {
+      console.error('[Quest] questId is undefined or empty!');
+      showNotification('❌ Invalid quest');
+      return;
+    }
+
     setCompletingQuest(questId);
     try {
+      const requestBody = { questId: questId };
+      console.log('[Quest] Sending request body:', JSON.stringify(requestBody));
+
       const result = await apiCall('/api/quests/complete', {
         method: 'POST',
-        body: JSON.stringify({ questId })
+        body: JSON.stringify(requestBody)
       });
 
       if (result.success) {

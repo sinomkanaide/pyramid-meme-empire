@@ -51,10 +51,13 @@ app.get('/health', (req, res) => {
 // Test endpoint to verify body parsing (no auth)
 app.post('/api/test-body', (req, res) => {
   console.log('[Test] Body received:', req.body);
+  console.log('[Test] Headers:', req.headers);
   res.json({
     received: req.body,
     hasQuestId: !!req.body?.questId,
-    questIdType: typeof req.body?.questId
+    questIdType: typeof req.body?.questId,
+    contentType: req.headers['content-type'],
+    bodyKeys: Object.keys(req.body || {})
   });
 });
 
