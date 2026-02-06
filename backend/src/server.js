@@ -69,7 +69,7 @@ app.get('/api/diagnostics/quests-sample', async (req, res) => {
 
     res.json({
       questCount: allQuests.length,
-      sampleQuests: allQuests,
+      sampleQuests: allQuests.slice(0, 2),
       questKeys: allQuests[0] ? Object.keys(allQuests[0]) : [],
       hasQuestId: allQuests[0]?.quest_id ? true : false,
       hasExternalUrl: allQuests[0]?.external_url ? true : false,
