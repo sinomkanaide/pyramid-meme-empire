@@ -8,6 +8,7 @@ const gameRoutes = require('./routes/game');
 const shopRoutes = require('./routes/shop');
 const referralsRoutes = require('./routes/referrals');
 const questsRoutes = require('./routes/quests');
+const adminRoutes = require('./routes/admin');
 
 // Import Quest model for initialization
 const Quest = require('./models/Quest');
@@ -21,8 +22,10 @@ app.use(cors({
     'https://pyramid-meme-empire.vercel.app',
     'https://pyramid-meme-empire-git-main-sinomkanaides-projects.vercel.app',
     process.env.FRONTEND_URL,
+    process.env.ADMIN_PANEL_URL,
     'http://localhost:3000',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'http://localhost:5174'
   ].filter(Boolean),
   credentials: true
 }));
@@ -137,6 +140,7 @@ app.use('/api/game', gameRoutes);
 app.use('/api/shop', shopRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/quests', questsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -164,6 +168,23 @@ const runMigrations = async () => {
      SELECT 'KiiChain Testnet', 'Interact with KiiChain testnet to earn a +20% Tap Bonus for 30 days!', '⚡', 'partner', 'partner_quest', 1, '{"url": "https://kiichain.io/testnet"}', 'boost', TRUE, 9
      WHERE NOT EXISTS (SELECT 1 FROM quests WHERE requirement_type = 'partner_quest')`,
     `UPDATE quests SET requirement_metadata = '{"url": "https://kiichain.io/testnet"}', sort_order = 0 WHERE requirement_type = 'partner_quest'`,
+    // Admin panel tables
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false',
+    `CREATE TABLE IF NOT EXISTS admin_xp_grants (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      amount INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      granted_by VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS leaderboard_prizes (
+      id SERIAL PRIMARY KEY,
+      position_from INTEGER NOT NULL,
+      position_to INTEGER NOT NULL,
+      prize_usdc DECIMAL(10,2) NOT NULL,
+      description TEXT DEFAULT ''
+    )`,
   ];
 
   for (const sql of migrations) {
@@ -239,6 +260,11 @@ const startServer = async () => {
 ║   - GET  /api/quests                              ║
 ║   - POST /api/quests/complete                     ║
 ║   - GET  /api/quests/progress/:id                 ║
+║   - POST /api/admin/login                         ║
+║   - GET  /api/admin/analytics/*                   ║
+║   - CRUD /api/admin/quests                        ║
+║   - CRUD /api/admin/users                         ║
+║   - GET  /api/admin/leaderboard                   ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
   `);

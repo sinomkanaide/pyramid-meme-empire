@@ -19,6 +19,11 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Check if user is banned
+    if (user.is_banned) {
+      return res.status(403).json({ error: 'Account suspended' });
+    }
+
     // Check premium and battle pass status
     const isPremium = await User.checkPremium(user.id);
     const hasBattlePass = await User.checkBattlePass(user.id);
@@ -65,6 +70,43 @@ const generateToken = (userId, walletAddress) => {
     process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
+};
+
+// Generate admin JWT token (shorter expiry, includes role)
+const generateAdminToken = (walletAddress) => {
+  return jwt.sign(
+    { walletAddress, role: 'admin' },
+    process.env.JWT_SECRET,
+    { expiresIn: '8h' }
+  );
+};
+
+// Verify admin JWT token
+const adminAuth = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Admin token required' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const adminWallet = process.env.ADMIN_WALLET;
+    if (!adminWallet || decoded.walletAddress.toLowerCase() !== adminWallet.toLowerCase()) {
+      return res.status(403).json({ error: 'Unauthorized wallet' });
+    }
+
+    req.admin = { walletAddress: decoded.walletAddress, role: decoded.role };
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired admin token' });
+  }
 };
 
 // Rate limiter middleware (simple in-memory)
@@ -137,6 +179,8 @@ module.exports = {
   verifySignature,
   generateAuthMessage,
   generateToken,
+  generateAdminToken,
+  adminAuth,
   rateLimit,
   tapRateLimit
 };
