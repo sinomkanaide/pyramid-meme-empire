@@ -136,6 +136,62 @@ router.post('/complete', async (req, res) => {
         }
       }
 
+      // Generic Partner API verification
+      if (quest.verification_method === 'partner_api') {
+        const walletAddress = req.user.wallet_address;
+        const apiConfig = quest.requirement_metadata || {};
+        const apiEndpoint = (apiConfig.api_endpoint || '').replace('{address}', walletAddress);
+        const apiMethod = (apiConfig.api_method || 'GET').toUpperCase();
+        const apiHeaders = apiConfig.api_headers || { 'Content-Type': 'application/json' };
+        const successExpr = apiConfig.success_expression || 'data.exists === true';
+
+        if (!apiEndpoint) {
+          return res.status(400).json({ error: 'Partner quest not properly configured' });
+        }
+
+        console.log(`[Quests] Partner API verification: ${apiMethod} ${apiEndpoint}`);
+
+        try {
+          const fetchOptions = { method: apiMethod, headers: apiHeaders };
+          if (apiMethod === 'POST' && apiConfig.api_body) {
+            fetchOptions.body = JSON.stringify(apiConfig.api_body).replace(/{address}/g, walletAddress);
+          }
+
+          const partnerResponse = await fetch(apiEndpoint, fetchOptions);
+
+          if (!partnerResponse.ok) {
+            console.error(`[Quests] Partner API error: ${partnerResponse.status}`);
+            return res.status(503).json({ error: 'Partner verification temporarily unavailable. Try again later.' });
+          }
+
+          const data = await partnerResponse.json();
+          console.log(`[Quests] Partner API response:`, data);
+
+          // Evaluate success condition safely
+          let verified = false;
+          try {
+            verified = new Function('data', `return ${successExpr}`)(data);
+          } catch (evalErr) {
+            console.error(`[Quests] Success expression eval error:`, evalErr);
+            verified = false;
+          }
+
+          if (!verified) {
+            return res.status(400).json({ error: 'Task not completed on partner platform. Try again.' });
+          }
+
+          // Apply reward based on quest config
+          if (apiConfig.reward_type === 'boost' && apiConfig.boost_percentage && apiConfig.boost_days) {
+            const multiplier = 1 + (apiConfig.boost_percentage / 100);
+            await GameProgress.setQuestBonus(req.user.id, multiplier, apiConfig.boost_days);
+            console.log(`[Quests] Partner bonus applied: +${apiConfig.boost_percentage}% for ${apiConfig.boost_days} days`);
+          }
+        } catch (fetchErr) {
+          console.error(`[Quests] Partner API fetch error:`, fetchErr);
+          return res.status(503).json({ error: 'Partner verification temporarily unavailable. Try again later.' });
+        }
+      }
+
       // KiiChain API verification
       if (quest.verification_method === 'kiichain_api') {
         const walletAddress = req.user.wallet_address;

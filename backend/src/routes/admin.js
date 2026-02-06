@@ -76,7 +76,7 @@ router.get('/analytics/overview', async (req, res) => {
     const activeResult = await db.query(`
       SELECT COUNT(DISTINCT user_id) as count
       FROM taps
-      WHERE created_at >= CURRENT_DATE
+      WHERE tapped_at >= CURRENT_DATE
     `);
     const activeToday = parseInt(activeResult.rows[0].count);
 
@@ -170,19 +170,19 @@ router.get('/analytics/users', async (req, res) => {
 
     // Active users per day (last 30 days)
     const activeByDayResult = await db.query(`
-      SELECT DATE(created_at) as date, COUNT(DISTINCT user_id) as count
+      SELECT DATE(tapped_at) as date, COUNT(DISTINCT user_id) as count
       FROM taps
-      WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-      GROUP BY DATE(created_at)
+      WHERE tapped_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(tapped_at)
       ORDER BY date ASC
     `);
 
     // Retention: % of users who come back the next day
     const retentionResult = await db.query(`
       WITH day_users AS (
-        SELECT DISTINCT user_id, DATE(created_at) as active_date
+        SELECT DISTINCT user_id, DATE(tapped_at) as active_date
         FROM taps
-        WHERE created_at >= CURRENT_DATE - INTERVAL '14 days'
+        WHERE tapped_at >= CURRENT_DATE - INTERVAL '14 days'
       )
       SELECT
         CASE WHEN COUNT(DISTINCT d1.user_id) = 0 THEN 0
@@ -312,10 +312,10 @@ router.get('/analytics/engagement', async (req, res) => {
     // Average taps per user per day (last 7 days)
     const avgTapsResult = await db.query(`
       SELECT ROUND(AVG(daily_taps), 1) as avg_taps FROM (
-        SELECT user_id, DATE(created_at) as tap_date, COUNT(*) as daily_taps
+        SELECT user_id, DATE(tapped_at) as tap_date, COUNT(*) as daily_taps
         FROM taps
-        WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-        GROUP BY user_id, DATE(created_at)
+        WHERE tapped_at >= CURRENT_DATE - INTERVAL '7 days'
+        GROUP BY user_id, DATE(tapped_at)
       ) sub
     `);
     const avgTapsPerUserPerDay = parseFloat(avgTapsResult.rows[0]?.avg_taps || 0);
@@ -453,7 +453,7 @@ router.post('/quests', async (req, res) => {
 router.put('/quests/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, icon, xp_reward, is_active, external_url, sort_order } = req.body;
+    const { title, description, icon, xp_reward, is_active, external_url, sort_order, partner_api_config } = req.body;
 
     // Build dynamic update
     const updates = [];
@@ -471,6 +471,13 @@ router.put('/quests/:id', async (req, res) => {
       paramCount++;
       updates.push(`requirement_metadata = jsonb_set(COALESCE(requirement_metadata, '{}'), '{url}', $${paramCount}::jsonb)`);
       values.push(JSON.stringify(external_url));
+    }
+
+    if (partner_api_config) {
+      // Merge partner API config into requirement_metadata
+      paramCount++;
+      updates.push(`requirement_metadata = COALESCE(requirement_metadata, '{}') || $${paramCount}::jsonb`);
+      values.push(JSON.stringify(partner_api_config));
     }
 
     if (updates.length === 0) {
@@ -793,10 +800,108 @@ router.post('/users/:id/unban', async (req, res) => {
 // LEADERBOARD MANAGEMENT
 // ============================================================================
 
-// GET /admin/leaderboard - Top players with full data
+// Initialize leaderboard_seasons table
+async function initSeasons() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS leaderboard_seasons (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      starts_at TIMESTAMP NOT NULL,
+      ends_at TIMESTAMP NOT NULL,
+      is_active BOOLEAN DEFAULT false,
+      prize_pool_usdc NUMERIC(10,2) DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+}
+initSeasons().catch(err => console.error('Season table init error:', err));
+
+// GET /admin/leaderboard/seasons - List all seasons
+router.get('/leaderboard/seasons', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT * FROM leaderboard_seasons ORDER BY starts_at DESC
+    `);
+    res.json({ seasons: result.rows });
+  } catch (error) {
+    console.error('Admin get seasons error:', error);
+    res.status(500).json({ error: 'Failed to get seasons' });
+  }
+});
+
+// POST /admin/leaderboard/seasons - Create season
+router.post('/leaderboard/seasons', async (req, res) => {
+  try {
+    const { name, starts_at, ends_at, prize_pool_usdc } = req.body;
+    if (!name || !starts_at || !ends_at) {
+      return res.status(400).json({ error: 'name, starts_at, ends_at required' });
+    }
+    const result = await db.query(`
+      INSERT INTO leaderboard_seasons (name, starts_at, ends_at, prize_pool_usdc)
+      VALUES ($1, $2, $3, $4) RETURNING *
+    `, [name, starts_at, ends_at, prize_pool_usdc || 0]);
+    res.json({ success: true, season: result.rows[0] });
+  } catch (error) {
+    console.error('Admin create season error:', error);
+    res.status(500).json({ error: 'Failed to create season' });
+  }
+});
+
+// PATCH /admin/leaderboard/seasons/:id/activate - Set active season
+router.patch('/leaderboard/seasons/:id/activate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Deactivate all, then activate this one
+    await db.query('UPDATE leaderboard_seasons SET is_active = false');
+    const result = await db.query(
+      'UPDATE leaderboard_seasons SET is_active = true WHERE id = $1 RETURNING *',
+      [parseInt(id)]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Season not found' });
+    }
+    res.json({ success: true, season: result.rows[0] });
+  } catch (error) {
+    console.error('Admin activate season error:', error);
+    res.status(500).json({ error: 'Failed to activate season' });
+  }
+});
+
+// DELETE /admin/leaderboard/seasons/:id - Delete season
+router.delete('/leaderboard/seasons/:id', async (req, res) => {
+  try {
+    const result = await db.query(
+      'DELETE FROM leaderboard_seasons WHERE id = $1 RETURNING id',
+      [parseInt(req.params.id)]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Season not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin delete season error:', error);
+    res.status(500).json({ error: 'Failed to delete season' });
+  }
+});
+
+// GET /admin/leaderboard - Top players with full data (optionally filtered by season)
 router.get('/leaderboard', async (req, res) => {
   try {
     const limit = Math.min(200, parseInt(req.query.limit) || 100);
+    const seasonId = req.query.season_id ? parseInt(req.query.season_id) : null;
+
+    let dateFilter = '';
+    const params = [limit];
+
+    if (seasonId) {
+      // Get season date range
+      const seasonResult = await db.query('SELECT * FROM leaderboard_seasons WHERE id = $1', [seasonId]);
+      if (seasonResult.rows.length > 0) {
+        const season = seasonResult.rows[0];
+        dateFilter = `AND u.created_at >= $2 AND u.created_at <= $3`;
+        params.push(season.starts_at, season.ends_at);
+      }
+    }
 
     const playersResult = await db.query(`
       SELECT u.id, u.wallet_address, u.username, u.is_premium, u.has_battle_pass,
@@ -804,18 +909,25 @@ router.get('/leaderboard', async (req, res) => {
              u.created_at
       FROM users u
       JOIN game_progress gp ON gp.user_id = u.id
+      WHERE 1=1 ${dateFilter}
       ORDER BY gp.bricks DESC
       LIMIT $1
-    `, [limit]);
+    `, params);
 
     // Get prize structure
     const prizesResult = await db.query(`
       SELECT * FROM leaderboard_prizes ORDER BY position_from ASC
     `);
 
+    // Get active season
+    const activeSeasonResult = await db.query(
+      'SELECT * FROM leaderboard_seasons WHERE is_active = true LIMIT 1'
+    );
+
     res.json({
       players: playersResult.rows.map((p, i) => ({ rank: i + 1, ...p })),
-      prizes: prizesResult.rows
+      prizes: prizesResult.rows,
+      activeSeason: activeSeasonResult.rows[0] || null
     });
   } catch (error) {
     console.error('Admin leaderboard error:', error);

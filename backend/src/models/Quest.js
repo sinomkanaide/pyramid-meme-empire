@@ -57,7 +57,12 @@ class Quest {
       verificationMethod = 'internal';
     }
     if (dbQuest.requirement_type === 'partner_quest') {
-      verificationMethod = 'kiichain_api';
+      // Check if quest has a custom API endpoint configured
+      if (dbQuest.requirement_metadata?.api_endpoint) {
+        verificationMethod = 'partner_api';
+      } else {
+        verificationMethod = 'kiichain_api';
+      }
     }
 
     // Get external URL from metadata

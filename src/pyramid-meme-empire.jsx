@@ -160,6 +160,10 @@ const PyramidMemeEmpireV5 = () => {
   const [questsLoading, setQuestsLoading] = useState(false);
   const [totalQuestXP, setTotalQuestXP] = useState(0);
   const [completingQuest, setCompletingQuest] = useState(null);
+
+  // Smart Verification state (per-quest, memory only - resets on reload)
+  const [questVerifyState, setQuestVerifyState] = useState({});
+  // questVerifyState[questId] = { goClickedAt, attempts, cooldownUntil, status, statusMsg }
   
   const coinSounds = useRef([]);
   const levelUpSound = useRef(null);
@@ -886,46 +890,138 @@ const PyramidMemeEmpireV5 = () => {
     }
   };
 
-  // Handle quest click - open external URL or complete
-  const handleQuestClick = async (quest) => {
+  // Platform-specific verification messages
+  const VERIFY_MESSAGES = {
+    twitter_follow: { checking: 'Checking Twitter followers list...', fail: 'Follow not detected on @handle' },
+    twitter_like: { checking: 'Checking tweet interactions...', fail: 'Like not detected on this tweet' },
+    twitter_retweet: { checking: 'Scanning retweet history...', fail: 'Retweet not detected' },
+    telegram_join: { checking: 'Checking Telegram group members...', fail: 'Membership not detected' },
+    discord_join: { checking: 'Checking Discord server members...', fail: 'Member not found in server' },
+  };
+  const getVerifyMsg = (reqType) => VERIFY_MESSAGES[reqType] || { checking: 'Verifying with platform...', fail: 'Task not detected' };
+
+  // Cooldown timer effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setQuestVerifyState(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const qid of Object.keys(next)) {
+          if (next[qid].cooldownUntil && Date.now() >= next[qid].cooldownUntil) {
+            next[qid] = { ...next[qid], cooldownUntil: null, status: 'ready', statusMsg: '' };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // GO button handler - records timestamp
+  const handleQuestGo = (quest) => {
     if (quest.isCompleted) return;
-
-    // For social/partner quests, open URL first
-    if (quest.external_url && (quest.type === 'social' || quest.type === 'partner_api' || quest.verification_method === 'kiichain_api')) {
-      window.open(quest.external_url, '_blank');
-    } else if (quest.verification_method === 'kiichain_api' && !quest.external_url) {
-      window.open('https://kiichain.io/testnet', '_blank');
-    }
-
-    // For milestone/referral quests, check if completable
-    if (quest.verification_method === 'internal') {
-      if (!quest.canComplete) {
-        showNotification(`📊 ${quest.progressText}`);
-        return;
-      }
-    }
+    const url = quest.external_url || (quest.verification_method === 'kiichain_api' ? 'https://kiichain.io/testnet' : '#');
+    window.open(url, '_blank');
+    setQuestVerifyState(prev => ({
+      ...prev,
+      [quest.quest_id]: { ...prev[quest.quest_id], goClickedAt: Date.now(), attempts: prev[quest.quest_id]?.attempts || 0, status: 'ready', statusMsg: '' }
+    }));
   };
 
-  // Verify and complete a quest (called by VERIFY button)
+  // VERIFY button handler - smart psychological verification
   const verifyQuest = async (quest) => {
-    console.log('[Quest] verifyQuest called with:', quest);
-    console.log('[Quest] quest.quest_id:', quest?.quest_id);
-    console.log('[Quest] quest keys:', quest ? Object.keys(quest) : 'quest is null/undefined');
+    if (!quest || quest.isCompleted) return;
 
-    if (!quest) {
-      console.error('[Quest] quest object is undefined!');
-      showNotification('❌ Error: Invalid quest');
+    // Internal verification (game quests) - just complete directly
+    if (quest.verification_method === 'internal') {
+      if (!quest.canComplete) {
+        showNotification(`📊 Progress: ${quest.progressText}`);
+        return;
+      }
+      await completeQuest(quest.quest_id);
       return;
     }
 
-    if (quest.isCompleted) return;
-
-    // For internal verification, check requirements first
-    if (quest.verification_method === 'internal' && !quest.canComplete) {
-      showNotification(`📊 Progress: ${quest.progressText}`);
+    // Partner API quests (kiichain_api) - complete directly (backend does real verification)
+    if (quest.verification_method === 'kiichain_api' || quest.verification_method === 'partner_api') {
+      await completeQuest(quest.quest_id);
       return;
     }
 
+    // Social quests - psychological verification
+    const qid = quest.quest_id;
+    const state = questVerifyState[qid] || {};
+    const reqType = quest.requirement_type || 'twitter_follow';
+    const msgs = getVerifyMsg(reqType);
+
+    // State 1: Hasn't clicked GO
+    if (!state.goClickedAt) {
+      setQuestVerifyState(prev => ({
+        ...prev,
+        [qid]: { ...state, status: 'error', statusMsg: '⚠️ Complete the task first! Click GO to start.' }
+      }));
+      return;
+    }
+
+    // Check cooldown
+    if (state.cooldownUntil && Date.now() < state.cooldownUntil) {
+      return; // Button should be disabled, but safety check
+    }
+
+    const timeSinceGo = Date.now() - state.goClickedAt;
+    const attempts = state.attempts || 0;
+
+    // State 2: Too fast (< 10 seconds since GO)
+    if (timeSinceGo < 10000) {
+      setQuestVerifyState(prev => ({
+        ...prev,
+        [qid]: { ...state, status: 'verifying', statusMsg: `🔍 ${msgs.checking}` }
+      }));
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 1000));
+      setQuestVerifyState(prev => ({
+        ...prev,
+        [qid]: { ...state, status: 'error', statusMsg: `❌ Task not completed yet. Please complete the task and try again.` }
+      }));
+      return;
+    }
+
+    // Start verification animation
+    setQuestVerifyState(prev => ({
+      ...prev,
+      [qid]: { ...state, status: 'verifying', statusMsg: `🔍 ${msgs.checking}` }
+    }));
+    await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+
+    // State 3: First real attempt → ALWAYS fail
+    if (attempts === 0) {
+      const cooldownEnd = Date.now() + 15000;
+      setQuestVerifyState(prev => ({
+        ...prev,
+        [qid]: { ...state, attempts: 1, status: 'cooldown', cooldownUntil: cooldownEnd, statusMsg: `❌ Verification failed. ${msgs.fail}. Please make sure you completed the task and try again.` }
+      }));
+      return;
+    }
+
+    // State 4: Second attempt → 50% chance
+    if (attempts === 1) {
+      const pass = Math.random() > 0.5;
+      if (!pass) {
+        const cooldownEnd = Date.now() + 10000;
+        setQuestVerifyState(prev => ({
+          ...prev,
+          [qid]: { ...state, attempts: 2, status: 'cooldown', cooldownUntil: cooldownEnd, statusMsg: `❌ Still not detected. Please verify you completed the task correctly and try again.` }
+        }));
+        return;
+      }
+      // Pass through to success below
+    }
+
+    // State 5: Third attempt or second attempt passed → ALWAYS approve
+    setQuestVerifyState(prev => ({
+      ...prev,
+      [qid]: { ...state, attempts: (attempts || 0) + 1, status: 'success', statusMsg: '✅ Verified! Task completed!' }
+    }));
     await completeQuest(quest.quest_id);
   };
 
@@ -2527,7 +2623,16 @@ const PyramidMemeEmpireV5 = () => {
 
                 {/* Quests List */}
                 <div className="quests-list">
-                  {quests.map((quest) => (
+                  {quests.map((quest) => {
+                    const vs = questVerifyState[quest.quest_id] || {};
+                    const isSocial = quest.verification_method === 'manual' && quest.type === 'social';
+                    const isPartner = quest.verification_method === 'kiichain_api' || quest.verification_method === 'partner_api';
+                    const hasGoVerify = (quest.external_url || isPartner) && (quest.type === 'social' || quest.type === 'partner' || isPartner);
+                    const cooldownLeft = vs.cooldownUntil ? Math.max(0, Math.ceil((vs.cooldownUntil - Date.now()) / 1000)) : 0;
+                    const isVerifying = vs.status === 'verifying';
+                    const isCooldown = vs.status === 'cooldown' && cooldownLeft > 0;
+
+                    return (
                     <div
                       key={quest.quest_id}
                       className={`quest-card ${quest.isCompleted ? 'quest-completed' : ''} ${!quest.canComplete && quest.verification_method === 'internal' ? 'quest-locked' : ''}`}
@@ -2546,6 +2651,13 @@ const PyramidMemeEmpireV5 = () => {
                               />
                             </div>
                             <span className="quest-progress-text">{quest.progressText}</span>
+                          </div>
+                        )}
+                        {/* Verification status message */}
+                        {!quest.isCompleted && vs.statusMsg && (
+                          <div className={`quest-verify-msg ${vs.status === 'success' ? 'msg-success' : vs.status === 'verifying' ? 'msg-verifying' : 'msg-error'}`}>
+                            {isVerifying && <span className="verify-spinner" />}
+                            <span>{vs.statusMsg}</span>
                           </div>
                         )}
                       </div>
@@ -2567,21 +2679,21 @@ const PyramidMemeEmpireV5 = () => {
                                 </>
                               )}
                             </div>
-                            {/* Action button */}
-                            {(quest.external_url || quest.verification_method === 'kiichain_api') && (quest.type === 'social' || quest.type === 'partner_api' || quest.verification_method === 'kiichain_api') ? (
+                            {/* Action buttons */}
+                            {hasGoVerify ? (
                               <div className="quest-actions">
                                 <button
                                   className="quest-btn quest-btn-go"
-                                  onClick={() => window.open(quest.external_url || (quest.verification_method === 'kiichain_api' ? 'https://kiichain.io/testnet' : '#'), '_blank')}
+                                  onClick={() => handleQuestGo(quest)}
                                 >
                                   GO
                                 </button>
                                 <button
-                                  className={`quest-btn quest-btn-verify ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
+                                  className={`quest-btn quest-btn-verify ${isVerifying ? 'btn-loading' : ''} ${isCooldown ? 'btn-disabled' : ''} ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
                                   onClick={() => verifyQuest(quest)}
-                                  disabled={completingQuest === quest.quest_id}
+                                  disabled={isVerifying || isCooldown || completingQuest === quest.quest_id}
                                 >
-                                  {completingQuest === quest.quest_id ? '...' : 'VERIFY'}
+                                  {isVerifying ? '...' : isCooldown ? `${cooldownLeft}s` : completingQuest === quest.quest_id ? '...' : 'VERIFY'}
                                 </button>
                               </div>
                             ) : (
@@ -2597,7 +2709,8 @@ const PyramidMemeEmpireV5 = () => {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Empty state */}
@@ -4029,6 +4142,45 @@ const PyramidMemeEmpireV5 = () => {
           opacity: 0.7;
           cursor: wait;
         }
+
+        /* Smart Verification Messages */
+        .quest-verify-msg {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 6px;
+          padding: 6px 10px;
+          border-radius: 6px;
+          font-size: 7px;
+          line-height: 1.3;
+          animation: fadeIn 0.3s ease;
+        }
+        .msg-error {
+          background: rgba(255, 50, 50, 0.12);
+          border: 1px solid rgba(255, 50, 50, 0.3);
+          color: #ff6666;
+        }
+        .msg-verifying {
+          background: rgba(0, 200, 255, 0.1);
+          border: 1px solid rgba(0, 200, 255, 0.3);
+          color: #00ccff;
+        }
+        .msg-success {
+          background: rgba(0, 255, 100, 0.12);
+          border: 1px solid rgba(0, 255, 100, 0.3);
+          color: #00ff66;
+        }
+        .verify-spinner {
+          width: 10px;
+          height: 10px;
+          border: 2px solid rgba(0, 200, 255, 0.3);
+          border-top: 2px solid #00ccff;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+          flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
         .quests-info {
           background: rgba(0, 255, 255, 0.05);
