@@ -6,6 +6,87 @@ const { calculateLevelFromXp, getXpProgress } = require('../models/GameProgress'
 const router = express.Router();
 
 // ============================================================================
+// AUTO-INIT TABLES (not in schema.sql)
+// ============================================================================
+async function initAdminTables() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS admin_xp_grants (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        amount INTEGER NOT NULL,
+        reason TEXT,
+        granted_by VARCHAR(42),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS leaderboard_prizes (
+        id SERIAL PRIMARY KEY,
+        position_from INTEGER NOT NULL,
+        position_to INTEGER NOT NULL,
+        prize_usdc NUMERIC(10,2) DEFAULT 0,
+        description TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    // Ensure quest_bonus columns exist on game_progress
+    await db.query(`
+      ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_multiplier DECIMAL(4,2) DEFAULT 1.0
+    `).catch(() => {});
+    await db.query(`
+      ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_expires_at TIMESTAMP WITH TIME ZONE
+    `).catch(() => {});
+
+    // Ensure quest_completions table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS quest_completions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        quest_id VARCHAR(50) NOT NULL,
+        completed_at TIMESTAMP DEFAULT NOW(),
+        xp_earned INTEGER NOT NULL DEFAULT 0,
+        is_verified BOOLEAN DEFAULT false,
+        UNIQUE(user_id, quest_id)
+      )
+    `);
+
+    console.log('[Admin] Admin tables initialized');
+  } catch (err) {
+    console.error('[Admin] Table init error:', err.message);
+  }
+}
+initAdminTables();
+
+// ============================================================================
+// DIAGNOSTIC - DB column check (no auth required)
+// ============================================================================
+router.get('/db-check', async (req, res) => {
+  try {
+    const tables = ['taps', 'users', 'game_progress', 'transactions', 'quests', 'quest_completions', 'referrals', 'leaderboard_prizes', 'admin_xp_grants'];
+    const result = {};
+    for (const table of tables) {
+      try {
+        const cols = await db.query(`
+          SELECT column_name, data_type
+          FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = $1
+          ORDER BY ordinal_position
+        `, [table]);
+        result[table] = cols.rows.length > 0
+          ? cols.rows.map(c => `${c.column_name} (${c.data_type})`)
+          : 'TABLE DOES NOT EXIST';
+      } catch (err) {
+        result[table] = `ERROR: ${err.message}`;
+      }
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
 // AUTH
 // ============================================================================
 
@@ -108,14 +189,14 @@ router.get('/analytics/overview', async (req, res) => {
 
     // Revenue by item
     const revenueByItemResult = await db.query(`
-      SELECT item_type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
+      SELECT type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
       FROM transactions
       WHERE status = 'confirmed'
-      GROUP BY item_type
+      GROUP BY type
       ORDER BY revenue DESC
     `);
     const revenueByItem = revenueByItemResult.rows.map(r => ({
-      item: r.item_type,
+      item: r.type,
       revenue: parseFloat(r.revenue),
       count: parseInt(r.count)
     }));
@@ -251,10 +332,10 @@ router.get('/analytics/revenue', async (req, res) => {
 
     // Revenue by item (for pie chart)
     const revenueByItemResult = await db.query(`
-      SELECT item_type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
+      SELECT type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
       FROM transactions
       WHERE status = 'confirmed'
-      GROUP BY item_type
+      GROUP BY type
       ORDER BY revenue DESC
     `);
 
@@ -285,7 +366,7 @@ router.get('/analytics/revenue', async (req, res) => {
         transactions: parseInt(r.tx_count)
       })),
       revenueByItem: revenueByItemResult.rows.map(r => ({
-        item: r.item_type,
+        item: r.type,
         revenue: parseFloat(r.revenue),
         count: parseInt(r.count)
       })),
@@ -304,13 +385,22 @@ router.get('/analytics/revenue', async (req, res) => {
 
 // GET /admin/analytics/engagement
 router.get('/analytics/engagement', async (req, res) => {
-  try {
-    // Total taps
-    const totalTapsResult = await db.query('SELECT COUNT(*) as count FROM taps');
-    const totalTaps = parseInt(totalTapsResult.rows[0].count);
+  const errors = [];
 
-    // Average taps per user per day (last 7 days)
-    const avgTapsResult = await db.query(`
+  // 1. Total taps
+  let totalTaps = 0;
+  try {
+    const result = await db.query('SELECT COUNT(*) as count FROM taps');
+    totalTaps = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Engagement] Total taps query failed:', err.message);
+    errors.push({ metric: 'totalTaps', error: err.message });
+  }
+
+  // 2. Average taps per user per day (last 7 days)
+  let avgTapsPerUserPerDay = 0;
+  try {
+    const result = await db.query(`
       SELECT ROUND(AVG(daily_taps), 1) as avg_taps FROM (
         SELECT user_id, DATE(tapped_at) as tap_date, COUNT(*) as daily_taps
         FROM taps
@@ -318,60 +408,110 @@ router.get('/analytics/engagement', async (req, res) => {
         GROUP BY user_id, DATE(tapped_at)
       ) sub
     `);
-    const avgTapsPerUserPerDay = parseFloat(avgTapsResult.rows[0]?.avg_taps || 0);
+    avgTapsPerUserPerDay = parseFloat(result.rows[0]?.avg_taps || 0);
+  } catch (err) {
+    console.error('[Engagement] Avg taps query failed:', err.message);
+    errors.push({ metric: 'avgTapsPerUserPerDay', error: err.message });
+  }
 
-    // Level distribution
-    const levelResult = await db.query(`
+  // 3. Level distribution
+  let levelDistribution = [];
+  try {
+    const result = await db.query(`
       SELECT level, COUNT(*) as count
       FROM game_progress
       GROUP BY level
       ORDER BY level ASC
     `);
+    levelDistribution = result.rows.map(r => ({
+      level: r.level,
+      count: parseInt(r.count)
+    }));
+  } catch (err) {
+    console.error('[Engagement] Level distribution query failed:', err.message);
+    errors.push({ metric: 'levelDistribution', error: err.message });
+  }
 
-    // Quest completions per quest
-    const questCompletionsResult = await db.query(`
-      SELECT q.title, q.id as quest_id, COUNT(qc.id) as completions
-      FROM quests q
-      LEFT JOIN quest_completions qc ON qc.quest_id = q.id::text
-      WHERE q.is_active = true
-      GROUP BY q.id, q.title
-      ORDER BY q.sort_order ASC
+  // 4. Quest completions per quest
+  let questCompletions = [];
+  try {
+    // First check if quest_completions table exists
+    const tableCheck = await db.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'quest_completions'
+      )
     `);
 
-    // Referral stats
-    const referralResult = await db.query(`
+    if (tableCheck.rows[0].exists) {
+      const result = await db.query(`
+        SELECT q.title, q.id as quest_id, COUNT(qc.id) as completions
+        FROM quests q
+        LEFT JOIN quest_completions qc ON qc.quest_id = q.id::text
+        WHERE q.is_active = true
+        GROUP BY q.id, q.title
+        ORDER BY q.sort_order ASC
+      `);
+      questCompletions = result.rows.map(r => ({
+        questId: r.quest_id,
+        title: r.title,
+        completions: parseInt(r.completions)
+      }));
+    } else {
+      // Table doesn't exist yet - just get quest list without completions
+      console.log('[Engagement] quest_completions table does not exist, showing quests with 0 completions');
+      const result = await db.query(`
+        SELECT title, id as quest_id FROM quests WHERE is_active = true ORDER BY sort_order ASC
+      `);
+      questCompletions = result.rows.map(r => ({
+        questId: r.quest_id,
+        title: r.title,
+        completions: 0
+      }));
+    }
+  } catch (err) {
+    console.error('[Engagement] Quest completions query failed:', err.message, err.stack);
+    errors.push({ metric: 'questCompletions', error: err.message });
+  }
+
+  // 5. Referral stats
+  let referrals = { total: 0, verified: 0, verificationRate: 0 };
+  try {
+    const result = await db.query(`
       SELECT
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE is_activated = true) as verified
       FROM referrals
     `);
-    const totalReferrals = parseInt(referralResult.rows[0]?.total || 0);
-    const verifiedReferrals = parseInt(referralResult.rows[0]?.verified || 0);
-
-    res.json({
-      totalTaps,
-      avgTapsPerUserPerDay,
-      levelDistribution: levelResult.rows.map(r => ({
-        level: r.level,
-        count: parseInt(r.count)
-      })),
-      questCompletions: questCompletionsResult.rows.map(r => ({
-        questId: r.quest_id,
-        title: r.title,
-        completions: parseInt(r.completions)
-      })),
-      referrals: {
-        total: totalReferrals,
-        verified: verifiedReferrals,
-        verificationRate: totalReferrals > 0
-          ? Math.round((verifiedReferrals / totalReferrals) * 1000) / 10
-          : 0
-      }
-    });
-  } catch (error) {
-    console.error('Admin analytics engagement error:', error);
-    res.status(500).json({ error: 'Failed to get engagement analytics' });
+    const totalReferrals = parseInt(result.rows[0]?.total || 0);
+    const verifiedReferrals = parseInt(result.rows[0]?.verified || 0);
+    referrals = {
+      total: totalReferrals,
+      verified: verifiedReferrals,
+      verificationRate: totalReferrals > 0
+        ? Math.round((verifiedReferrals / totalReferrals) * 1000) / 10
+        : 0
+    };
+  } catch (err) {
+    console.error('[Engagement] Referrals query failed:', err.message);
+    errors.push({ metric: 'referrals', error: err.message });
   }
+
+  // Return partial data even if some queries failed
+  const response = {
+    totalTaps,
+    avgTapsPerUserPerDay,
+    levelDistribution,
+    questCompletions,
+    referrals
+  };
+
+  if (errors.length > 0) {
+    console.error('[Engagement] Partial failures:', JSON.stringify(errors));
+    response._errors = errors;
+  }
+
+  res.json(response);
 });
 
 // ============================================================================
@@ -610,42 +750,56 @@ router.get('/users/:id', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Transactions
-    const txResult = await db.query(`
-      SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20
-    `, [parseInt(id)]);
+    // Each sub-query wrapped to avoid full endpoint failure
+    let transactions = [];
+    try {
+      const txResult = await db.query(
+        'SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20',
+        [parseInt(id)]
+      );
+      transactions = txResult.rows;
+    } catch (err) { console.error('[UserDetail] transactions query failed:', err.message); }
 
-    // Completed quests
-    const questsResult = await db.query(`
-      SELECT qc.*, q.title
-      FROM quest_completions qc
-      LEFT JOIN quests q ON qc.quest_id = q.id::text
-      WHERE qc.user_id = $1
-      ORDER BY qc.completed_at DESC
-    `, [parseInt(id)]);
+    let completedQuests = [];
+    try {
+      const questsResult = await db.query(`
+        SELECT qc.*, q.title
+        FROM quest_completions qc
+        LEFT JOIN quests q ON qc.quest_id = q.id::text
+        WHERE qc.user_id = $1
+        ORDER BY qc.completed_at DESC
+      `, [parseInt(id)]);
+      completedQuests = questsResult.rows;
+    } catch (err) { console.error('[UserDetail] quests query failed:', err.message); }
 
-    // Referral stats
-    const referralsResult = await db.query(`
-      SELECT COUNT(*) as total,
-             COUNT(*) FILTER (WHERE is_activated = true) as verified
-      FROM referrals
-      WHERE referrer_id = $1
-    `, [parseInt(id)]);
+    let referrals = { total: 0, verified: 0 };
+    try {
+      const referralsResult = await db.query(`
+        SELECT COUNT(*) as total,
+               COUNT(*) FILTER (WHERE is_activated = true) as verified
+        FROM referrals WHERE referrer_id = $1
+      `, [parseInt(id)]);
+      referrals = {
+        total: parseInt(referralsResult.rows[0]?.total || 0),
+        verified: parseInt(referralsResult.rows[0]?.verified || 0)
+      };
+    } catch (err) { console.error('[UserDetail] referrals query failed:', err.message); }
 
-    // XP grants history
-    const grantsResult = await db.query(`
-      SELECT * FROM admin_xp_grants WHERE user_id = $1 ORDER BY created_at DESC
-    `, [parseInt(id)]);
+    let xpGrants = [];
+    try {
+      const grantsResult = await db.query(
+        'SELECT * FROM admin_xp_grants WHERE user_id = $1 ORDER BY created_at DESC',
+        [parseInt(id)]
+      );
+      xpGrants = grantsResult.rows;
+    } catch (err) { console.error('[UserDetail] xp_grants query failed:', err.message); }
 
     res.json({
       user,
-      transactions: txResult.rows,
-      completedQuests: questsResult.rows,
-      referrals: {
-        total: parseInt(referralsResult.rows[0]?.total || 0),
-        verified: parseInt(referralsResult.rows[0]?.verified || 0)
-      },
-      xpGrants: grantsResult.rows
+      transactions,
+      completedQuests,
+      referrals,
+      xpGrants
     });
   } catch (error) {
     console.error('Admin get user detail error:', error);
