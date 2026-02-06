@@ -4,9 +4,9 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from 'recharts'
 
-const CHART_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899']
+const CHART_COLORS = ['#a855f7', '#00ffff', '#ffd700', '#00ff88', '#ff4466', '#4488ff']
 
-const PIE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6']
+const PIE_COLORS = ['#a855f7', '#00ffff', '#ffd700', '#00ff88', '#ff4466']
 
 const ITEM_LABELS = {
   premium: 'Premium',
@@ -98,11 +98,11 @@ export default function Dashboard({ apiCall }) {
           {userData?.registrationsByDay?.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={userData.registrationsByDay.map(d => ({ ...d, date: formatDate(d.date) }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3e" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: '#1c1f2e', border: '1px solid #2a2d3e', borderRadius: 6, fontSize: 12 }} />
-                <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={false} name="New Users" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+                <XAxis dataKey="date" stroke="#5a5a78" fontSize={11} />
+                <YAxis stroke="#5a5a78" fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#111118', border: '1px solid #8b5cf6', borderRadius: 6, fontSize: 12 }} />
+                <Line type="monotone" dataKey="count" stroke="#00ffff" strokeWidth={2} dot={false} name="New Users" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -116,11 +116,11 @@ export default function Dashboard({ apiCall }) {
           {revenueData?.revenueByDay?.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={revenueData.revenueByDay.map(d => ({ ...d, date: formatDate(d.date) }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3e" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} tickFormatter={v => `$${v}`} />
-                <Tooltip contentStyle={{ background: '#1c1f2e', border: '1px solid #2a2d3e', borderRadius: 6, fontSize: 12 }} formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
-                <Line type="monotone" dataKey="revenue" stroke="#f59e0b" strokeWidth={2} dot={false} name="Revenue" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+                <XAxis dataKey="date" stroke="#5a5a78" fontSize={11} />
+                <YAxis stroke="#5a5a78" fontSize={11} tickFormatter={v => `$${v}`} />
+                <Tooltip contentStyle={{ background: '#111118', border: '1px solid #8b5cf6', borderRadius: 6, fontSize: 12 }} formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
+                <Line type="monotone" dataKey="revenue" stroke="#ffd700" strokeWidth={2} dot={false} name="Revenue" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -134,10 +134,10 @@ export default function Dashboard({ apiCall }) {
           {revenueData?.revenueByItem?.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={revenueData.revenueByItem.map(d => ({ ...d, name: ITEM_LABELS[d.item] || d.item }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3e" />
-                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} tickFormatter={v => `$${v}`} />
-                <Tooltip contentStyle={{ background: '#1c1f2e', border: '1px solid #2a2d3e', borderRadius: 6, fontSize: 12 }} formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+                <XAxis dataKey="name" stroke="#5a5a78" fontSize={11} />
+                <YAxis stroke="#5a5a78" fontSize={11} tickFormatter={v => `$${v}`} />
+                <Tooltip contentStyle={{ background: '#111118', border: '1px solid #8b5cf6', borderRadius: 6, fontSize: 12 }} formatter={v => [`$${Number(v).toFixed(2)}`, 'Revenue']} />
                 <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
                   {revenueData.revenueByItem.map((_, i) => (
                     <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
@@ -156,11 +156,11 @@ export default function Dashboard({ apiCall }) {
           {userData?.activeByDay?.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={userData.activeByDay.map(d => ({ ...d, date: formatDate(d.date) }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3e" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: '#1c1f2e', border: '1px solid #2a2d3e', borderRadius: 6, fontSize: 12 }} />
-                <Line type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} dot={false} name="Active Users" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+                <XAxis dataKey="date" stroke="#5a5a78" fontSize={11} />
+                <YAxis stroke="#5a5a78" fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#111118', border: '1px solid #8b5cf6', borderRadius: 6, fontSize: 12 }} />
+                <Line type="monotone" dataKey="count" stroke="#00ff88" strokeWidth={2} dot={false} name="Active Users" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -256,11 +256,11 @@ export default function Dashboard({ apiCall }) {
           {engagement?.levelDistribution?.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={engagement.levelDistribution.map(d => ({ level: `Lv ${d.level}`, count: d.count }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3e" />
-                <XAxis dataKey="level" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: '#1c1f2e', border: '1px solid #2a2d3e', borderRadius: 6, fontSize: 12 }} />
-                <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Players" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e30" />
+                <XAxis dataKey="level" stroke="#5a5a78" fontSize={11} />
+                <YAxis stroke="#5a5a78" fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#111118', border: '1px solid #8b5cf6', borderRadius: 6, fontSize: 12 }} />
+                <Bar dataKey="count" fill="#a855f7" radius={[4, 4, 0, 0]} name="Players" />
               </BarChart>
             </ResponsiveContainer>
           ) : (

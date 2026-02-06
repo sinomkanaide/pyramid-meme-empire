@@ -56,7 +56,7 @@ export default function Login({ apiUrl, onLogin }) {
 
       onLogin(data.token, walletAddress)
     } catch (err) {
-      setError('Connection error. Check backend.')
+      setError(`Connection error: ${err.message}. API: ${apiUrl}`)
       setLoading(false)
     }
   }
