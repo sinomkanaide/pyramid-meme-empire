@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
 const Quest = require('../models/Quest');
+const GameProgress = require('../models/GameProgress');
 
 const router = express.Router();
 
@@ -135,6 +136,44 @@ router.post('/complete', async (req, res) => {
         }
       }
 
+      // KiiChain API verification
+      if (quest.verification_method === 'kiichain_api') {
+        const walletAddress = req.user.wallet_address;
+        console.log(`[Quests] KiiChain verification for wallet: ${walletAddress}`);
+
+        try {
+          const kiiResponse = await fetch(
+            `https://backend.testnet.kiivalidator.com/users/check/${walletAddress}`,
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+
+          if (!kiiResponse.ok) {
+            console.error(`[Quests] KiiChain API error: ${kiiResponse.status}`);
+            return res.status(503).json({
+              error: 'Verification temporarily unavailable, try again later'
+            });
+          }
+
+          const kiiData = await kiiResponse.json();
+          console.log(`[Quests] KiiChain response:`, kiiData);
+
+          if (!kiiData.exists) {
+            return res.status(400).json({
+              error: "You haven't interacted with KiiChain testnet yet"
+            });
+          }
+        } catch (fetchErr) {
+          console.error(`[Quests] KiiChain API fetch error:`, fetchErr);
+          return res.status(503).json({
+            error: 'Verification temporarily unavailable, try again later'
+          });
+        }
+
+        // KiiChain verified - apply +20% tap bonus for 30 days
+        await GameProgress.setQuestBonus(req.user.id, 1.2, 30);
+        console.log(`[Quests] KiiChain bonus applied: +20% for 30 days`);
+      }
+
       // Complete the quest
       const completion = await Quest.complete(req.user.id, questId, quest.xp_reward);
 
@@ -145,13 +184,26 @@ router.post('/complete', async (req, res) => {
       // Get updated totals
       const totalQuestXP = await Quest.getTotalQuestXP(req.user.id);
 
-      res.json({
+      // Build response
+      const response = {
         success: true,
         questId,
         xpEarned: quest.xp_reward,
         totalQuestXP,
-        message: `+${quest.xp_reward} XP earned!`
-      });
+        message: quest.verification_method === 'kiichain_api'
+          ? '+20% Tap Bonus activated for 30 days!'
+          : `+${quest.xp_reward} XP earned!`
+      };
+
+      // Include quest bonus info if KiiChain
+      if (quest.verification_method === 'kiichain_api') {
+        response.questBonus = {
+          multiplier: 1.2,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        };
+      }
+
+      res.json(response);
     } catch (error) {
       console.error('Complete quest error:', error);
       res.status(500).json({ error: 'Failed to complete quest' });

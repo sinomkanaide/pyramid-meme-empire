@@ -53,7 +53,8 @@ class GameProgress {
   // Process a tap
   // hasBattlePass: grants X5 boost, +10% XP, no cooldown, no energy use
   // referralBonusMultiplier: 1.0 base + 0.1 per verified referral (e.g., 1.3 = +30%)
-  static async processTap(userId, isPremium = false, hasBattlePass = false, referralBonusMultiplier = 1, sessionId = null, ipAddress = null) {
+  // questBonusMultiplier: 1.2 if KiiChain quest completed (active), 1.0 otherwise
+  static async processTap(userId, isPremium = false, hasBattlePass = false, referralBonusMultiplier = 1, questBonusMultiplier = 1, sessionId = null, ipAddress = null) {
     const progress = await this.findByUserId(userId);
 
     if (!progress) {
@@ -99,15 +100,16 @@ class GameProgress {
     }
 
     // Calculate XP/Bricks earned
-    // Base: 1 brick * boost multiplier
+    // Formula: baseXP * boostMultiplier * battlePassBonus * referralBonus * questBonus
     let baseXP = 1 * boostMultiplier;
 
     // Battle Pass: +10% XP bonus (1.1x)
     const battlePassBonus = hasBattlePass ? 1.1 : 1;
 
-    // Referral bonus: +10% per verified referral
-    const totalMultiplier = baseXP * battlePassBonus * referralBonusMultiplier;
-    const bricksEarned = Math.floor(totalMultiplier);
+    // Referral bonus: +10% per verified referral (BP only)
+    // Quest bonus: +20% from KiiChain (all users, independent)
+    const totalMultiplier = baseXP * battlePassBonus * referralBonusMultiplier * questBonusMultiplier;
+    const bricksEarned = Math.max(1, Math.floor(totalMultiplier));
 
     const energyUsed = hasUnlimitedEnergy ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;
@@ -163,6 +165,39 @@ class GameProgress {
         percent: xpProgress.percent
       }
     };
+  }
+
+  // Get quest bonus multiplier (check expiry)
+  static async getQuestBonus(userId) {
+    const progress = await this.findByUserId(userId);
+    if (!progress) return 1;
+
+    const now = new Date();
+    const expiresAt = progress.quest_bonus_expires_at ? new Date(progress.quest_bonus_expires_at) : null;
+
+    if (expiresAt && expiresAt > now) {
+      return parseFloat(progress.quest_bonus_multiplier) || 1;
+    }
+
+    // Expired or not set
+    return 1;
+  }
+
+  // Set quest bonus (e.g., KiiChain +20% for 30 days)
+  static async setQuestBonus(userId, multiplier, durationDays) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + durationDays);
+
+    const result = await db.query(
+      `UPDATE game_progress
+       SET quest_bonus_multiplier = $1,
+           quest_bonus_expires_at = $2,
+           updated_at = NOW()
+       WHERE user_id = $3
+       RETURNING *`,
+      [multiplier, expiresAt, userId]
+    );
+    return result.rows[0];
   }
 
   // Regenerate energy (called periodically)

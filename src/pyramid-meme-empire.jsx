@@ -137,6 +137,8 @@ const PyramidMemeEmpireV5 = () => {
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [availableWallets, setAvailableWallets] = useState([]);
+  const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
+  const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
 
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
@@ -463,6 +465,10 @@ const PyramidMemeEmpireV5 = () => {
       if (data.referralStats) {
         setReferralStats(data.referralStats);
       }
+
+      // Load quest bonus (KiiChain)
+      setQuestBonusMultiplier(data.questBonusMultiplier || 1);
+      setQuestBonusExpiresAt(data.questBonusExpiresAt || null);
     } catch (err) {
       console.error('Load progress error:', err);
     }
@@ -847,23 +853,33 @@ const PyramidMemeEmpireV5 = () => {
       });
 
       if (result.success) {
-        // Update local state - no need to reload all quests
         setQuests(prev => prev.map(q =>
           q.quest_id === questId ? { ...q, isCompleted: true } : q
         ));
         setTotalQuestXP(result.totalQuestXP);
-        showNotification(`🎉 +${result.xpEarned} XP!`);
+
+        // Check if quest gave a bonus (KiiChain) or XP
+        if (result.questBonus) {
+          setQuestBonusMultiplier(result.questBonus.multiplier);
+          setQuestBonusExpiresAt(result.questBonus.expiresAt);
+          showNotification('+20% Tap Bonus activated for 30 days!');
+        } else {
+          showNotification(`+${result.xpEarned} XP!`);
+        }
         playWhoosh();
-        // Don't call loadQuests() - it causes all quests to show loading
       }
     } catch (err) {
       console.error('Complete quest error:', err);
       if (err.message?.includes('already')) {
-        showNotification('✅ Already completed!');
+        showNotification('Already completed!');
       } else if (err.message?.includes('Requirements')) {
-        showNotification('❌ Requirements not met!');
+        showNotification('Requirements not met!');
+      } else if (err.message?.includes('KiiChain') || err.message?.includes('interacted')) {
+        showNotification(err.message);
+      } else if (err.message?.includes('unavailable')) {
+        showNotification('Verification temporarily unavailable, try again later');
       } else {
-        showNotification('❌ Failed to complete quest');
+        showNotification('Failed to complete quest');
       }
     } finally {
       setCompletingQuest(null);
@@ -875,8 +891,10 @@ const PyramidMemeEmpireV5 = () => {
     if (quest.isCompleted) return;
 
     // For social/partner quests, open URL first
-    if (quest.external_url && (quest.type === 'social' || quest.type === 'partner_api')) {
+    if (quest.external_url && (quest.type === 'social' || quest.type === 'partner_api' || quest.verification_method === 'kiichain_api')) {
       window.open(quest.external_url, '_blank');
+    } else if (quest.verification_method === 'kiichain_api' && !quest.external_url) {
+      window.open('https://app.testnet.kiichain.io/kiichain', '_blank');
     }
 
     // For milestone/referral quests, check if completable
@@ -2362,6 +2380,28 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
                 )}
 
+                {questBonusMultiplier > 1 && (
+                  <div className="quest-bonus-indicator" style={{
+                    background: 'linear-gradient(135deg, rgba(0,230,118,0.15), rgba(0,230,118,0.05))',
+                    border: '1px solid rgba(0,230,118,0.3)',
+                    borderRadius: '8px',
+                    padding: '4px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginTop: '4px',
+                    fontSize: '11px'
+                  }}>
+                    <span>⚡</span>
+                    <span style={{ color: '#00e676', fontWeight: 'bold' }}>+{Math.round((questBonusMultiplier - 1) * 100)}% TAP BONUS</span>
+                    {questBonusExpiresAt && (
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '10px' }}>
+                        {Math.ceil((new Date(questBonusExpiresAt) - new Date()) / (1000 * 60 * 60 * 24))}d left
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="tap-hint">
                   {hasBattlePass ? 'BATTLE PASS POWER!' : isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
                 </div>
@@ -2515,15 +2555,24 @@ const PyramidMemeEmpireV5 = () => {
                         ) : (
                           <>
                             <div className="quest-reward-text">
-                              <div className="reward-amount">+{quest.xp_reward?.toLocaleString()}</div>
-                              <div className="reward-label">XP</div>
+                              {quest.verification_method === 'kiichain_api' ? (
+                                <>
+                                  <div className="reward-amount" style={{ color: '#00e676' }}>+20%</div>
+                                  <div className="reward-label">TAP BONUS</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="reward-amount">+{quest.xp_reward?.toLocaleString()}</div>
+                                  <div className="reward-label">XP</div>
+                                </>
+                              )}
                             </div>
                             {/* Action button */}
-                            {quest.external_url && (quest.type === 'social' || quest.type === 'partner_api') ? (
+                            {(quest.external_url || quest.verification_method === 'kiichain_api') && (quest.type === 'social' || quest.type === 'partner_api' || quest.verification_method === 'kiichain_api') ? (
                               <div className="quest-actions">
                                 <button
                                   className="quest-btn quest-btn-go"
-                                  onClick={() => window.open(quest.external_url, '_blank')}
+                                  onClick={() => window.open(quest.external_url || (quest.verification_method === 'kiichain_api' ? 'https://app.testnet.kiichain.io/kiichain' : '#'), '_blank')}
                                 >
                                   GO
                                 </button>
@@ -2561,6 +2610,7 @@ const PyramidMemeEmpireV5 = () => {
                 <div className="quests-info">
                   <p>🎁 Complete quests to earn XP and climb the leaderboard!</p>
                   <p>✅ Social quests: Click GO, then VERIFY to claim</p>
+                  <p>⚡ KiiChain quest: +20% Tap Bonus for 30 days!</p>
                 </div>
               </div>
             </div>

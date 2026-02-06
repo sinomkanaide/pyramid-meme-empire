@@ -35,6 +35,13 @@ router.get('/progress', async (req, res) => {
     const battlePassInfo = req.user.hasBattlePass ? await User.getBattlePassInfo(req.user.id) : null;
     const referralStats = req.user.hasBattlePass ? await User.getVerifiedReferralStats(req.user.id) : null;
 
+    // Get quest bonus (KiiChain, all users)
+    const questBonusMultiplier = await GameProgress.getQuestBonus(req.user.id);
+    const questBonusExpiresAt = progress.quest_bonus_expires_at
+      ? new Date(progress.quest_bonus_expires_at)
+      : null;
+    const questBonusActive = questBonusMultiplier > 1 && questBonusExpiresAt && questBonusExpiresAt > now;
+
     // Battle Pass users always have X5 boost
     const effectiveMultiplier = req.user.hasBattlePass ? 5 : activeMultiplier;
     const effectiveBoostType = req.user.hasBattlePass ? 'battle_pass' : (isBoostActive ? progress.boost_type : null);
@@ -57,7 +64,9 @@ router.get('/progress', async (req, res) => {
       referralStats,
       isLevelCapped,
       maxFreeLevel: FREE_USER_MAX_LEVEL,
-      xpProgress
+      xpProgress,
+      questBonusMultiplier: questBonusActive ? questBonusMultiplier : 1,
+      questBonusExpiresAt: questBonusActive ? questBonusExpiresAt.toISOString() : null
     });
   } catch (error) {
     console.error('Get progress error:', error);
@@ -78,11 +87,15 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       referralBonusMultiplier = referralStats.bonusMultiplier;
     }
 
+    // Get quest bonus multiplier (KiiChain +20%, all users)
+    const questBonusMultiplier = await GameProgress.getQuestBonus(req.user.id);
+
     const result = await GameProgress.processTap(
       req.user.id,
       req.user.isPremium,
       req.user.hasBattlePass,
       referralBonusMultiplier,
+      questBonusMultiplier,
       null, // sessionId - can be implemented later
       ipAddress
     );
@@ -114,7 +127,8 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       boostType: effectiveBoostType,
       isBoostActive: isBoostActive || req.user.hasBattlePass,
       xpProgress: result.xpProgress,
-      referralBonusMultiplier: req.user.hasBattlePass ? referralBonusMultiplier : 1
+      referralBonusMultiplier: req.user.hasBattlePass ? referralBonusMultiplier : 1,
+      questBonusMultiplier
     });
   } catch (error) {
     if (error.message === 'Tap cooldown active') {

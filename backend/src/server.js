@@ -158,17 +158,18 @@ const runMigrations = async () => {
   const migrations = [
     'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS chain_id INTEGER DEFAULT 8453',
     'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS block_number BIGINT',
+    'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_multiplier DECIMAL(4,2) DEFAULT 1.0',
+    'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_expires_at TIMESTAMP WITH TIME ZONE',
   ];
 
   for (const sql of migrations) {
     try {
       await db.query(sql);
     } catch (err) {
-      // Column might already exist or table might not exist yet - that's ok
       console.log('[Migration] Skipped:', err.message);
     }
   }
-  console.log('[Migration] Transactions table columns verified');
+  console.log('[Migration] Table columns verified');
 };
 
 // Initialize database tables and start server

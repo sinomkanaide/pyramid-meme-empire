@@ -46,12 +46,18 @@ class Quest {
     if (!dbQuest) return null;
 
     // Get XP reward based on requirement_type
-    const xpReward = dbQuest.reward_amount || XP_REWARDS[dbQuest.requirement_type] || 500;
+    // KiiChain partner quest gives +20% tap bonus instead of XP
+    const xpReward = dbQuest.requirement_type === 'partner_quest'
+      ? 0
+      : (dbQuest.reward_amount || XP_REWARDS[dbQuest.requirement_type] || 500);
 
     // Determine verification method
     let verificationMethod = 'manual';
     if (dbQuest.requirement_type?.includes('milestone') || dbQuest.requirement_type?.includes('referral')) {
       verificationMethod = 'internal';
+    }
+    if (dbQuest.requirement_type === 'partner_quest') {
+      verificationMethod = 'kiichain_api';
     }
 
     // Get external URL from metadata
