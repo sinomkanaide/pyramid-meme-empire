@@ -347,3 +347,196 @@ Backend:
 ---
 
 *Documento generado automaticamente - Session 2026-02-05*
+
+---
+
+## SESIÓN 2026-02-05 (Noche) - ADMIN PANEL + QUEST VERIFICATION SYSTEM
+
+### FEATURES IMPLEMENTADAS:
+
+1. **SISTEMA DE PAGOS USDC REAL (Base Network)**
+   - Commit: a7dcca2
+   - paymentService.js con verificación on-chain
+   - Verificación de: sender, recipient, monto, confirmaciones (2+)
+   - Anti-replay: txHash único en DB
+   - Frontend con estados: signing → confirming → verifying → done
+   - Shop 100% funcional con pagos reales
+   - Wallet de pagos: 0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027
+
+2. **QUEST KIICHAIN CON API REAL**
+   - Commit: d9a5732
+   - Verificación vía API: https://backend.testnet.kiivalidator.com/users/check/{wallet}
+   - Recompensa: +20% bonus en taps por 30 días (NO XP)
+   - Bonus independiente de Battle Pass
+   - Columnas nuevas: quest_bonus_multiplier, quest_bonus_expires_at
+   - Fórmula: baseXP × boost × battlePass × referral × questBonus
+   - Máximo posible: 8.58x (BP + X5 + 3 refs + KiiChain)
+
+3. **ADMIN PANEL COMPLETO**
+   - Commits: múltiples
+   - App separada en /admin (Vite + React)
+   - Deployed: https://pyramid-meme-empire-jxrk.vercel.app
+   - Auth: wallet 0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027 + password
+   - Token JWT con role 'admin' (8h expiry)
+   - Backend: 15+ endpoints en /api/admin/*
+
+4. **ANALYTICS DASHBOARD**
+   - 4 secciones completas: Overview, Users, Revenue, Engagement
+   - Cards de métricas con % cambio vs semana anterior
+   - 4 gráficas con Recharts:
+     * Nuevos usuarios por día (30d) - cyan neón
+     * Revenue por día (30d) - dorado neón
+     * Revenue por item (bar chart multicolor)
+     * Usuarios activos por día (30d) - verde neón
+   - Métricas de negocio: ARPU, conversión, retention
+   - Level distribution, quest completions
+   - Estética retro arcade neón (morado/cyan/dorado)
+
+5. **QUEST MANAGEMENT**
+   - CRUD completo de quests desde admin
+   - Quest creator dinámico con campos según tipo
+   - 3 tipos de verificación:
+     * 🧠 Smart (psicológica) - para social quests
+     * 🔗 API (real) - para partner quests
+     * 🎮 Auto - para game quests
+
+6. **VERIFICACIÓN PSICOLÓGICA (Social Quests)**
+   - Commit: a26407a
+   - Sistema frontend-only para Twitter/Telegram/Discord
+   - Flujo:
+     1. Sin GO → rechazo inmediato
+     2. <10s después GO → "verificando..." → rechazo
+     3. 1er intento → SIEMPRE falla + cooldown 15s
+     4. 2do intento → 50% falla + cooldown 10s
+     5. 3er intento → SIEMPRE pasa
+   - Mensajes realistas: "Checking Twitter API...", etc.
+   - Estado en memoria (NO localStorage)
+   - Presiona psicológicamente a completar la tarea
+
+7. **PARTNER API QUESTS**
+   - Sistema configurable desde admin
+   - Campos: API endpoint, HTTP method, headers, success expression
+   - Placeholder {address} se reemplaza con wallet del usuario
+   - Rewards: XP o Boost (% + días)
+   - Verificación real en backend
+   - Ejemplo: KiiChain quest
+
+8. **LEADERBOARD SEASONS**
+   - Tabla leaderboard_seasons
+   - CRUD: crear/activar/eliminar seasons
+   - Filtro por season (Current / All Time)
+   - Prize pool configurable
+   - Preparado para torneos semanales/mensuales
+
+9. **USER MANAGEMENT**
+   - Lista con búsqueda, filtros, paginación
+   - Detalle expandible (progress, transactions, quests, referrals)
+   - Acciones admin:
+     * Grant XP (con reason logueado)
+     * Grant Premium
+     * Grant Battle Pass
+     * Ban/Unban
+   - Tabla admin_xp_grants para auditoría
+
+### BUGS ARREGLADOS:
+
+1. **CORS Admin Panel**
+   - Admin .env en .gitignore → Vercel sin VITE_API_URL
+   - Fix: Fallback hardcodeado a Railway URL
+   - Admin URL agregada a CORS backend
+
+2. **Wallet Validation**
+   - Login permitía wallets incorrectas
+   - Fix: Validación doble (endpoint + middleware)
+   - Solo permite: 0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027
+
+3. **Dashboard Engagement Error**
+   - Endpoint /analytics/engagement crasheaba todo
+   - Causa: Queries con columnas incorrectas (created_at vs tapped_at, item_type vs type)
+   - Tablas faltantes: quest_completions, admin_xp_grants, leaderboard_prizes
+   - Fix: Try-catch individual por métrica
+   - Fix: Auto-init de tablas en startup
+   - Fix: Datos parciales si alguna query falla
+   - Endpoint diagnóstico: GET /api/admin/db-check
+
+4. **Estética Admin**
+   - Tema genérico oscuro
+   - Fix: Retro arcade neón acorde al juego
+   - Colores: morado neón (#8b5cf6), cyan (#00ffff), dorado (#ffd700)
+   - Font: Courier New monospace
+   - Glow effects, gradientes, text-shadow
+
+### VARIABLES DE ENTORNO NUEVAS:
+
+**Railway (Backend):**
+- SHOP_WALLET_ADDRESS=0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027
+- ADMIN_PASSWORD=[contraseña segura]
+- ADMIN_WALLET=0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027
+- ADMIN_PANEL_URL=https://pyramid-meme-empire-jxrk.vercel.app
+
+**Vercel (Admin):**
+- VITE_API_URL=https://pyramid-meme-empire-production.up.railway.app
+
+### ESTRUCTURA DE ARCHIVOS NUEVOS:
+
+```
+/admin                              (Admin panel app separada)
+├── package.json
+├── vite.config.js
+├── src/
+│   ├── App.jsx                     (routing + auth)
+│   ├── components/
+│   │   ├── Login.jsx               (wallet + password)
+│   │   ├── Dashboard.jsx           (analytics + gráficas)
+│   │   ├── QuestManager.jsx        (CRUD quests)
+│   │   ├── UserManager.jsx         (user actions)
+│   │   ├── LeaderboardManager.jsx  (seasons + prizes)
+│   │   └── XPGrantModal.jsx        (grant XP)
+│   └── styles/
+│       └── admin.css               (retro arcade neón)
+/backend/src/
+├── routes/
+│   └── admin.js                    (15+ endpoints admin)
+├── services/
+│   └── paymentService.js           (verificación USDC on-chain)
+└── middleware/
+    └── auth.js                     (adminAuth middleware)
+```
+
+### DEPLOYMENT:
+
+- **Frontend Principal:** https://pyramid-meme-empire.vercel.app
+- **Admin Panel:** https://pyramid-meme-empire-jxrk.vercel.app
+- **Backend:** https://pyramid-meme-empire-production.up.railway.app
+
+### TESTING REALIZADO:
+
+- ✅ Pagos USDC funcionando (Energy Refill testeado)
+- ✅ Quest KiiChain con API real
+- ✅ Verificación psicológica de quests sociales
+- ✅ Admin login con wallet correcta
+- ✅ Dashboard cargando sin errores
+- ✅ Quest creator dinámico
+- ✅ User manager con acciones
+
+### PENDIENTES PARA MAÑANA:
+
+1. Crear cuentas sociales reales:
+   - Twitter: @PyramidMeme (o similar)
+   - Discord: servidor Pyramid Meme Empire
+   - Telegram: canal/grupo
+
+2. Actualizar URLs en quests con enlaces reales
+
+3. Opcional - Discord bot para verificación real
+
+4. Marketing y lanzamiento oficial
+
+### NOTAS IMPORTANTES:
+
+- Dashboard del admin usa endpoint /db-check para verificar schema
+- Todas las tablas se auto-crean en startup si no existen
+- Error handling robusto: datos parciales si algo falla
+- Verificación psicológica es frontend-only, no cambia backend
+- Partner quests soportan cualquier API con config personalizada
+- Leaderboard preparado para torneos con seasons
