@@ -894,7 +894,7 @@ const PyramidMemeEmpireV5 = () => {
     if (quest.external_url && (quest.type === 'social' || quest.type === 'partner_api' || quest.verification_method === 'kiichain_api')) {
       window.open(quest.external_url, '_blank');
     } else if (quest.verification_method === 'kiichain_api' && !quest.external_url) {
-      window.open('https://app.testnet.kiichain.io/kiichain', '_blank');
+      window.open('https://kiichain.io/testnet', '_blank');
     }
 
     // For milestone/referral quests, check if completable
@@ -2572,7 +2572,7 @@ const PyramidMemeEmpireV5 = () => {
                               <div className="quest-actions">
                                 <button
                                   className="quest-btn quest-btn-go"
-                                  onClick={() => window.open(quest.external_url || (quest.verification_method === 'kiichain_api' ? 'https://app.testnet.kiichain.io/kiichain' : '#'), '_blank')}
+                                  onClick={() => window.open(quest.external_url || (quest.verification_method === 'kiichain_api' ? 'https://kiichain.io/testnet' : '#'), '_blank')}
                                 >
                                   GO
                                 </button>

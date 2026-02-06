@@ -161,8 +161,9 @@ const runMigrations = async () => {
     'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_multiplier DECIMAL(4,2) DEFAULT 1.0',
     'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_expires_at TIMESTAMP WITH TIME ZONE',
     `INSERT INTO quests (title, description, icon, quest_type, requirement_type, requirement_value, requirement_metadata, reward_type, is_reward_hidden, sort_order)
-     SELECT 'KiiChain Testnet', 'Interact with KiiChain testnet to earn a +20% Tap Bonus for 30 days!', '⚡', 'partner', 'partner_quest', 1, '{"url": "https://app.testnet.kiichain.io/kiichain"}', 'boost', TRUE, 9
+     SELECT 'KiiChain Testnet', 'Interact with KiiChain testnet to earn a +20% Tap Bonus for 30 days!', '⚡', 'partner', 'partner_quest', 1, '{"url": "https://kiichain.io/testnet"}', 'boost', TRUE, 9
      WHERE NOT EXISTS (SELECT 1 FROM quests WHERE requirement_type = 'partner_quest')`,
+    `UPDATE quests SET requirement_metadata = '{"url": "https://kiichain.io/testnet"}' WHERE requirement_type = 'partner_quest'`,
   ];
 
   for (const sql of migrations) {
