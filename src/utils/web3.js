@@ -1,4 +1,4 @@
-// Web3 Utilities for PyramidMeme Empire
+// Web3 Utilities for TAPKAMUN.FUN
 // Handles wallet connections, contract interactions, and USDC payments
 
 // Base Network Configuration

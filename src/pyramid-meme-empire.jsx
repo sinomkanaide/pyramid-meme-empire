@@ -37,7 +37,7 @@ const TOOLTIP_DATA = {
   },
   battlepass: {
     title: 'BATTLE PASS',
-    description: 'The ultimate PyramidMeme experience for 30 days.',
+    description: 'The ultimate TAPKAMUN experience for 30 days.',
     benefits: ['Permanent X5 boost', '+10% XP bonus', 'Leaderboard access', '+10% XP per verified referral', 'Golden pyramid skin', 'Unlimited energy & no cooldown']
   },
   boostx2: {
@@ -58,7 +58,7 @@ const TOOLTIP_DATA = {
 };
 
 // ============================================================================
-// PYRAMID MEME EMPIRE V5 - COMPLETE SYSTEM
+// TAPKAMUN.FUN V5 - COMPLETE SYSTEM
 // Arena, Quests, Energy, Tooltips, TBA Rewards
 // ============================================================================
 
@@ -596,7 +596,7 @@ const PyramidMemeEmpireV5 = () => {
       }
     }
 
-    // Add $PME (TBA - hidden amount)
+    // Add $KAMUN (TBA - hidden amount)
     const pmeGain = Math.floor(Math.random() * 3) + 1;
     setSpme(prev => prev + pmeGain);
 
@@ -1325,14 +1325,14 @@ const PyramidMemeEmpireV5 = () => {
 
   // ========== SHARE ==========
   const shareOnTwitter = () => {
-    const text = encodeURIComponent(`Building my 🗿 PyramidMeme Empire! Join me for eternal boosts 🚀`);
+    const text = encodeURIComponent(`Building my 🗿 TAPKAMUN empire! Join me for eternal boosts 🚀`);
     const url = encodeURIComponent(referralLink);
     window.open(`https://x.com/intent/tweet?text=${text}%20${url}`, '_blank');
     playWhoosh();
   };
 
   const shareOnTelegram = () => {
-    const text = encodeURIComponent(`Building my 🗿 PyramidMeme Empire! Join me for eternal boosts 🚀`);
+    const text = encodeURIComponent(`Building my 🗿 TAPKAMUN empire! Join me for eternal boosts 🚀`);
     const url = encodeURIComponent(referralLink);
     window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
     playWhoosh();
@@ -2286,7 +2286,7 @@ const PyramidMemeEmpireV5 = () => {
                   👥 +10% XP per Verified Referral
                 </div>
                 <div style={{ color: '#FFD700', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
-                  🗿 Golden Pyramid Skin
+                  🗿 Golden Pharaoh Skin
                 </div>
                 <div style={{ color: '#0f0', fontSize: 10, marginBottom: 8, fontFamily: 'inherit' }}>
                   ♾️ Unlimited Energy
@@ -2349,7 +2349,7 @@ const PyramidMemeEmpireV5 = () => {
 
         {/* Header */}
         <header className="header">
-          <div className="logo">PYRAMIDMEME</div>
+          <div className="logo">TAPKAMUN</div>
           {walletAddress ? (
             <div className="wallet-badge">
               {walletAddress.slice(0, 4)}...{walletAddress.slice(-3)}
@@ -2384,7 +2384,7 @@ const PyramidMemeEmpireV5 = () => {
                 
                 <div className="stat-box">
                   <div className="stat-emoji">💰</div>
-                  <div className="stat-label">$PME</div>
+                  <div className="stat-label">$KAMUN</div>
                   <div className="stat-value neon-purple">TBA</div>
                 </div>
                 

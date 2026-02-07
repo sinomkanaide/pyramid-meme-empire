@@ -1,8 +1,8 @@
-# Pyramid Meme Empire - Database Schema
+# TAPKAMUN.FUN - Database Schema
 
 ## Overview
 
-PostgreSQL database schema for the Pyramid Meme Empire tap-to-earn game.
+PostgreSQL database schema for the TAPKAMUN.FUN tap-to-earn game.
 
 ## Tables Structure
 
@@ -52,7 +52,7 @@ npm run db:init
 ### 2. Expected Output
 
 ```
-PYRAMID MEME EMPIRE - Database Initialization
+TAPKAMUN.FUN - Database Initialization
 ================================================
 
 Reading schema.sql file...

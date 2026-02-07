@@ -20,7 +20,7 @@ router.get('/stats', async (req, res) => {
       bonusPercent: stats.bonusPercent,
       bonusMultiplier: stats.bonusMultiplier,
       // Generate referral link
-      referralLink: `${process.env.FRONTEND_URL || 'https://pyramidmeme.com'}?ref=${referralCode}`
+      referralLink: `${process.env.FRONTEND_URL || 'https://tapkamun.fun'}?ref=${referralCode}`
     });
   } catch (error) {
     console.error('Get referral stats error:', error);
@@ -72,13 +72,13 @@ router.get('/list', async (req, res) => {
 router.get('/code', async (req, res) => {
   try {
     const referralCode = await User.getReferralCode(req.user.id);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://pyramidmeme.com';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://tapkamun.fun';
 
     res.json({
       code: referralCode,
       link: `${frontendUrl}?ref=${referralCode}`,
-      shareText: `Join me on Pyramid Meme Empire! Use my referral code: ${referralCode}`,
-      twitterShareUrl: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just got Pyramid Meme Empire Battle Pass! 🔥 Join me and earn bonus XP! #PyramidMemeEmpire #Web3Gaming`)}&url=${encodeURIComponent(`${frontendUrl}?ref=${referralCode}`)}`
+      shareText: `Join me on TAPKAMUN.FUN! Use my referral code: ${referralCode}`,
+      twitterShareUrl: `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Just got TAPKAMUN Battle Pass! 🔥 Join me and earn bonus XP! #TAPKAMUN #Web3Gaming`)}&url=${encodeURIComponent(`${frontendUrl}?ref=${referralCode}`)}`
     });
   } catch (error) {
     console.error('Get referral code error:', error);

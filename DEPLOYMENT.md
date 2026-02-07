@@ -1,4 +1,4 @@
-# 🚀 DEPLOYMENT GUIDE - PyramidMeme Empire
+# 🚀 DEPLOYMENT GUIDE - TAPKAMUN.FUN
 
 ## Complete Step-by-Step Deployment Instructions
 
@@ -75,7 +75,7 @@ git init
 git add .
 
 # Commit
-git commit -m "Initial commit - PyramidMeme Empire"
+git commit -m "Initial commit - TAPKAMUN.FUN"
 
 # Create repo on GitHub, then:
 git remote add origin https://github.com/YOUR_USERNAME/pyramid-meme-empire.git
@@ -385,7 +385,7 @@ Before going live:
 
 ## 🎉 You're Live!
 
-Congratulations! Your PyramidMeme Empire is now deployed and running.
+Congratulations! Your TAPKAMUN.FUN app is now deployed and running.
 
 **Next Steps:**
 1. Share your game URL

@@ -292,7 +292,7 @@ function UserDetail({ detail, onGrantXP, onGrantPremium, onGrantBattlePass, onTo
             <div><span>Level</span><span>{user.level || 1}</span></div>
             <div><span>Bricks (XP)</span><span>{(user.bricks || 0).toLocaleString()}</span></div>
             <div><span>Total Taps</span><span>{(user.total_taps || 0).toLocaleString()}</span></div>
-            <div><span>PME Tokens</span><span>{(user.pme_tokens || 0).toLocaleString()}</span></div>
+            <div><span>$KAMUN Tokens</span><span>{(user.pme_tokens || 0).toLocaleString()}</span></div>
             <div><span>Energy</span><span>{user.energy || 0} / {user.max_energy || 100}</span></div>
             <div><span>Total Bricks Earned</span><span>{(user.total_bricks_earned || 0).toLocaleString()}</span></div>
           </div>

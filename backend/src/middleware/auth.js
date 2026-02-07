@@ -52,7 +52,7 @@ const verifySignature = (message, signature, expectedAddress) => {
 
 // Generate auth message for signing
 const generateAuthMessage = (walletAddress, nonce, timestamp) => {
-  return `Welcome to Pyramid Meme Empire!
+  return `Welcome to TAPKAMUN.FUN!
 
 Sign this message to authenticate your wallet.
 

@@ -66,9 +66,9 @@ export default function Login({ apiUrl, onLogin }) {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="login-logo">PME</div>
+        <div className="login-logo">KAMUN</div>
         <h1 className="login-title">Admin Panel</h1>
-        <p className="login-subtitle">Pyramid Meme Empire</p>
+        <p className="login-subtitle">TAPKAMUN.FUN</p>
 
         {error && <div className="login-error">{error}</div>}
 

@@ -1,7 +1,7 @@
 {
   "name": "pyramid-meme-empire-backend",
   "version": "1.0.0",
-  "description": "Backend API for Pyramid Meme Empire - Tap to Earn on Base",
+  "description": "Backend API for TAPKAMUN.FUN - Tap to Earn on Base",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",

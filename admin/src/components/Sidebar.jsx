@@ -6,7 +6,7 @@ export default function Sidebar({ wallet, onLogout }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="sidebar-logo">PME</div>
+        <div className="sidebar-logo">KAMUN</div>
         <span className="sidebar-title">Admin</span>
       </div>
 

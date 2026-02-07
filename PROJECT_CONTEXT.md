@@ -1,4 +1,4 @@
-# PYRAMID MEME EMPIRE - Project Context
+# TAPKAMUN.FUN - Project Context (formerly Pyramid Meme Empire)
 
 > Last Updated: 2026-02-05
 > Status: **Production Ready** with Quest System Working
@@ -237,7 +237,7 @@ static transformQuest(dbQuest) {
 ### Prioridad Media
 5. 📋 Notificaciones push cuando quest completable
 6. 📋 Daily quests con reset
-7. 📋 Quest rewards en PME tokens (no solo XP)
+7. 📋 Quest rewards en $KAMUN tokens (no solo XP)
 
 ### Prioridad Baja
 8. 📋 Leaderboard por quests completadas

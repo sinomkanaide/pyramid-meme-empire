@@ -1,10 +1,10 @@
-# 🔺 PyramidMeme Empire - Tap to Earn on Base
+# 🗿 TAPKAMUN.FUN - Tap to Earn on Base
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Base Network](https://img.shields.io/badge/network-Base-blue)
 ![Built with React](https://img.shields.io/badge/built%20with-React-61DAFB)
 
-**Stack Memes. Build Empires. Earn $PME.**
+**Tap. Stack. Earn $KAMUN.**
 
 A Web3 tap-to-earn game built on Base Network with degen aesthetics and real USDC payments.
 
@@ -281,8 +281,8 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/pyramid-meme-empire/issues)
-- **Twitter**: [@PyramidMemeEmpire](https://twitter.com/pyramidmeme)
-- **Discord**: [Join our server](https://discord.gg/pyramidmeme)
+- **Twitter**: [@TAPKAMUN](https://twitter.com/tapkamun)
+- **Discord**: [Join our server](https://discord.gg/tapkamun)
 
 ---
 
@@ -295,7 +295,7 @@ MIT License - see [LICENSE](LICENSE) file for details
 - [ ] Battle Pass NFT minting
 - [ ] Referral system
 - [ ] Daily missions
-- [ ] $PME token launch
+- [ ] $KAMUN token launch
 - [ ] Staking mechanics
 - [ ] Mobile app (React Native)
 

@@ -7,7 +7,7 @@ Go to: https://lovable.dev
 
 ### Step 2: Create New Project
 - Click "New Project"
-- Name it: "PyramidMeme Empire"
+- Name it: "TAPKAMUN.FUN"
 
 ### Step 3: Copy the Main Component
 
@@ -174,7 +174,7 @@ Your game URL will be:
 Copy this template:
 
 ```
-🔺 PyramidMeme Empire is LIVE! 
+🗿 TAPKAMUN.FUN is LIVE! 
 
 Stack Memes. Build Empires. Earn $PME.
 

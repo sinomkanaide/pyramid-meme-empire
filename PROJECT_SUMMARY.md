@@ -1,4 +1,4 @@
-# 🎉 PYRAMID MEME EMPIRE - PROJECT COMPLETE!
+# 🎉 TAPKAMUN.FUN - PROJECT COMPLETE!
 
 ## ✅ What You Have Now
 
@@ -205,7 +205,7 @@ Example: Tap with x5 + Battle Pass = 5 × 1.1 = 5.5 XP
 3. [ ] Create Discord/Telegram community
 4. [ ] Implement referral system (future feature)
 5. [ ] Add daily missions (future feature)
-6. [ ] Launch $PME token (future feature)
+6. [ ] Launch $KAMUN token (future feature)
 7. [ ] Build staking mechanics (future feature)
 
 ---
@@ -352,6 +352,6 @@ Need help?
 
 ---
 
-**Good luck building your PyramidMeme Empire! 🔺💎**
+**Good luck building your TAPKAMUN empire! 🗿💎**
 
 *Remember: This is a complete, production-ready game. All you need to do is deploy!*

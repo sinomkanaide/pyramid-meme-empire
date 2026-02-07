@@ -1,6 +1,6 @@
-# Pyramid Meme Empire - Backend API
+# TAPKAMUN.FUN - Backend API
 
-Backend API for the Pyramid Meme Empire tap-to-earn game on Base Network.
+Backend API for the TAPKAMUN.FUN tap-to-earn game on Base Network.
 
 ## Tech Stack
 
