@@ -1,5 +1,5 @@
 // API Configuration
-export const API_URL = import.meta.env.VITE_API_URL || 'https://pyramid-meme-empire-production.up.railway.app';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://api.tapkamun.fun';
 
 // Helper function for API calls
 export async function apiCall(endpoint, options = {}) {

@@ -19,6 +19,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors({
   origin: [
+    'https://tapkamun.fun',
+    'https://www.tapkamun.fun',
+    'https://api.tapkamun.fun',
     'https://pyramid-meme-empire.vercel.app',
     'https://pyramid-meme-empire-git-main-sinomkanaides-projects.vercel.app',
     'https://pyramid-meme-empire-jxrk.vercel.app',

@@ -62,7 +62,7 @@ const TOOLTIP_DATA = {
 // Arena, Quests, Energy, Tooltips, TBA Rewards
 // ============================================================================
 
-const API_URL = 'https://pyramid-meme-empire-production.up.railway.app';
+const API_URL = 'https://api.tapkamun.fun';
 
 // ========== API HELPERS ==========
 const getToken = () => localStorage.getItem('pme_token');

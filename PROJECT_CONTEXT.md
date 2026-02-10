@@ -36,8 +36,8 @@ ff730fb - Update quests-sample endpoint to show transformed data
 ### URLs de Produccion
 ```
 Frontend:  https://pyramid-meme-empire.vercel.app
-Backend:   https://pyramid-meme-empire-production.up.railway.app
-Health:    https://pyramid-meme-empire-production.up.railway.app/health
+Backend:   https://api.tapkamun.fun
+Health:    https://api.tapkamun.fun/health
 ```
 
 ### GitHub
@@ -143,7 +143,7 @@ FRONTEND_URL=https://pyramid-meme-empire.vercel.app
 
 **Frontend (Vercel):**
 ```
-VITE_API_URL=https://pyramid-meme-empire-production.up.railway.app
+VITE_API_URL=https://api.tapkamun.fun
 ```
 
 ---
@@ -263,16 +263,16 @@ git commit --allow-empty -m "Force redeploy" && git push
 ### Verificar Produccion
 ```bash
 # Health check
-curl -s -k https://pyramid-meme-empire-production.up.railway.app/health
+curl -s -k https://api.tapkamun.fun/health
 
 # Ver estado de tablas
-curl -s -k https://pyramid-meme-empire-production.up.railway.app/api/diagnostics/tables
+curl -s -k https://api.tapkamun.fun/api/diagnostics/tables
 
 # Ver quests transformadas
-curl -s -k https://pyramid-meme-empire-production.up.railway.app/api/diagnostics/quests-sample
+curl -s -k https://api.tapkamun.fun/api/diagnostics/quests-sample
 
 # Test body parsing
-curl -s -k -X POST "https://pyramid-meme-empire-production.up.railway.app/api/test-body" \
+curl -s -k -X POST "https://api.tapkamun.fun/api/test-body" \
   -H "Content-Type: application/json" \
   -d '{"questId":"1"}'
 ```
@@ -475,7 +475,7 @@ Backend:
 - ADMIN_PANEL_URL=https://pyramid-meme-empire-jxrk.vercel.app
 
 **Vercel (Admin):**
-- VITE_API_URL=https://pyramid-meme-empire-production.up.railway.app
+- VITE_API_URL=https://api.tapkamun.fun
 
 ### ESTRUCTURA DE ARCHIVOS NUEVOS:
 
@@ -507,7 +507,7 @@ Backend:
 
 - **Frontend Principal:** https://pyramid-meme-empire.vercel.app
 - **Admin Panel:** https://pyramid-meme-empire-jxrk.vercel.app
-- **Backend:** https://pyramid-meme-empire-production.up.railway.app
+- **Backend:** https://api.tapkamun.fun
 
 ### TESTING REALIZADO:
 

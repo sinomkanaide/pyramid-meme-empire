@@ -7,7 +7,7 @@ import QuestManager from './components/QuestManager'
 import UserManager from './components/UserManager'
 import LeaderboardManager from './components/LeaderboardManager'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://pyramid-meme-empire-production.up.railway.app'
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.tapkamun.fun'
 
 function App() {
   // Token stored in memory only (not localStorage) for security
