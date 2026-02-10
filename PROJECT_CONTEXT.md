@@ -1,7 +1,7 @@
 # TAPKAMUN.FUN - Project Context (formerly Pyramid Meme Empire)
 
-> Last Updated: 2026-02-05
-> Status: **Production Ready** with Quest System Working
+> Last Updated: 2026-02-10
+> Status: **Production Ready** with OAuth + Branding + Quest System
 
 ---
 
@@ -15,7 +15,7 @@
 
 ### Ultimo Commit
 ```
-ff730fb - Update quests-sample endpoint to show transformed data
+79b973e - fix: Twitter OAuth authorize endpoint and scopes
 ```
 
 ### Features Status
@@ -27,7 +27,11 @@ ff730fb - Update quests-sample endpoint to show transformed data
 | Referral System | ✅ | Bonus +10% per verified referral |
 | Leaderboard | ✅ | Top 100 players |
 | Quest System | ✅ | 8 quests, GO/VERIFY working |
-| Multi-wallet | ✅ | MetaMask, Phantom supported |
+| Multi-wallet | ✅ | MetaMask, Phantom, EVM bridge fallback |
+| Twitter OAuth | ✅ | PKCE flow, connect/disconnect/status |
+| Discord OAuth | ✅ | OAuth 2.0, connect/disconnect/status |
+| SEO / Branding | ✅ | OG tags, Twitter cards, manifest, robots.txt |
+| Logo / Favicon | ✅ | Golden paw logo, banner text |
 
 ---
 
@@ -540,3 +544,153 @@ Backend:
 - Verificación psicológica es frontend-only, no cambia backend
 - Partner quests soportan cualquier API con config personalizada
 - Leaderboard preparado para torneos con seasons
+
+---
+
+## SESIÓN 2026-02-10 - REBRAND + BRANDING + OAUTH + WALLET FIXES
+
+### REBRAND: Pyramid Meme Empire → TAPKAMUN.FUN
+
+- **Commit**: 16c29c6 - rebrand completo
+- Token: $PME → $KAMUN
+- Solo cambios user-visible (NO file names, variables, CSS classes, DB tables)
+- 17 archivos modificados
+
+### API URL MIGRATION
+
+- **Commit**: a08d900 - feat: update API URL to api.tapkamun.fun
+- Frontend + Admin apuntan a `https://api.tapkamun.fun`
+- CORS: tapkamun.fun + www + api + todas las URLs antiguas como fallback
+- `.env.example` actualizado
+
+### BRANDING VISUAL COMPLETO
+
+- **Commits**: c5ea893, 8c84020, e5f780f, 667ad94
+- Logo: pata dorada pixelada con "T" (logo.webp en /public/)
+- Banner: "TAPKAMUN.FUN" texto pixel dorado (banner.webp en /public/)
+- Header del juego: texto "TAPKAMUN" color dorado #F5C800 con text-shadow
+- Favicon: logo.webp (principal + admin)
+- Admin login: logo image con glow animation
+
+**SEO Meta Tags (index.html):**
+- Open Graph: title, description, image (banner.webp)
+- Twitter Cards: summary_large_image
+- Keywords, canonical URL, robots, author, language
+- theme-color: #8b5cf6
+
+**Nuevos archivos:**
+- `/public/logo.webp` - Logo pata dorada
+- `/public/banner.webp` - Banner texto TAPKAMUN.FUN
+- `/public/manifest.json` - PWA manifest
+- `/public/robots.txt` - SEO robots
+
+### WALLET CONNECTION FIXES
+
+- **Commit**: a356a40 - fix: Phantom EVM bridge error handling
+  - Handle "Me: Unexpected error" from Phantom's evmAsk.js
+  - Auto-fallback: si Phantom falla, intenta MetaMask automáticamente
+  - Mejor detección de Phantom cuando hijackea window.ethereum
+
+- **Commit**: 7fabf7d - fix: nonce TTL + auto-retry
+  - Nonce TTL ya era 5min (300s) - confirmado
+  - Backend logging: `[Nonce] Created...`, `[Verify] Nonce age...`
+  - Frontend: auto-retry loop (max 2 intentos) si nonce expira
+  - Re-pide nonce + re-firma sin interacción del usuario
+
+### TWITTER & DISCORD OAuth
+
+- **Commit**: 6993ba2 - feat: Twitter and Discord OAuth
+- **Commit**: 79b973e - fix: Twitter OAuth scopes + encoding
+
+**Backend** (`backend/src/routes/oauth.js` - NUEVO):
+```
+GET  /api/oauth/twitter/connect      - Genera URL de autorización (PKCE)
+GET  /api/oauth/twitter/callback     - Recibe callback, guarda id+username
+GET  /api/oauth/twitter/status       - Check si está conectado
+POST /api/oauth/twitter/disconnect   - Desconectar
+
+GET  /api/oauth/discord/connect      - Genera URL de autorización
+GET  /api/oauth/discord/callback     - Recibe callback, guarda id+username
+GET  /api/oauth/discord/status       - Check si está conectado
+POST /api/oauth/discord/disconnect   - Desconectar
+
+GET  /api/oauth/status               - Estado de ambas cuentas
+```
+
+**DB Migration** (auto en startup):
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_id VARCHAR(100)`
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_username VARCHAR(100)`
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(100)`
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100)`
+
+**Frontend:**
+- Sección "CONNECTED ACCOUNTS" en tab Quests
+- Botones Connect X / Connect Discord
+- Username verde cuando conectado, botón ✕ para desconectar
+- Social quests requieren cuenta: VERIFY → "🔗 X" o "🔗 DC" si no conectado
+- Verificación psicológica usa username real:
+  - `"Checking if @juanperez follows @tapkamun..."`
+  - `"Scanning @juanperez's recent likes..."`
+
+**Variables de entorno (Railway):**
+```
+TWITTER_CLIENT_ID=...
+TWITTER_CLIENT_SECRET=...
+TWITTER_CALLBACK_URL=https://api.tapkamun.fun/api/oauth/twitter/callback
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+DISCORD_CALLBACK_URL=https://api.tapkamun.fun/api/oauth/discord/callback
+```
+
+**OAuth Notes:**
+- Twitter usa PKCE (S256) - NO guarda access tokens
+- Solo guarda id + username en DB
+- State parameter incluye origin para redirect correcto
+- Scopes: `tweet.read users.read` (sin follows.read)
+- URL construida manual con encodeURIComponent (%20 no +)
+- Logging detallado en callbacks
+
+### ESTRUCTURA DE ARCHIVOS ACTUALIZADA
+
+```
+/public/
+├── logo.webp                         (Logo pata dorada - favicon + PWA)
+├── banner.webp                       (Banner texto TAPKAMUN.FUN - OG image)
+├── manifest.json                     (PWA manifest)
+├── robots.txt                        (SEO)
+├── coins/                            (Memecoin sprites)
+└── sounds/                           (SFX)
+
+/backend/src/routes/
+├── admin.js                          (Admin endpoints)
+├── auth.js                           (Nonce + verify + JWT)
+├── game.js                           (Taps, energy, progress)
+├── oauth.js                          (Twitter + Discord OAuth) ← NUEVO
+├── quests.js                         (Quest CRUD + completion)
+├── referrals.js                      (Referral system)
+└── shop.js                           (Shop + payments)
+```
+
+### COMMITS ESTA SESIÓN
+
+| Commit | Descripción |
+|--------|-------------|
+| a08d900 | feat: update API URL to api.tapkamun.fun |
+| c5ea893 | feat: add TAPKAMUN branding with logos and SEO meta tags |
+| 8c84020 | fix: use local logo/banner assets instead of Discord CDN |
+| a356a40 | fix: improve wallet connection error handling for Phantom |
+| 7fabf7d | fix: increase nonce TTL to 5min and add auto-retry |
+| e5f780f | fix: use banner text logo instead of paw icon in game header |
+| 667ad94 | fix: replace logo image with golden TAPKAMUN text in header |
+| 6993ba2 | feat: Twitter and Discord OAuth connection for quest verification |
+| 79b973e | fix: Twitter OAuth authorize endpoint and scopes |
+
+### PENDIENTES
+
+1. ⬜ Verificar OAuth en producción con cuentas reales
+2. ⬜ Agregar `follows.read` scope si Twitter lo permite
+3. ⬜ Progress bars visuales para milestone quests
+4. ⬜ Daily quests con reset
+5. ⬜ Quest rewards en $KAMUN tokens
+6. ⬜ Sitemap.xml para SEO completo
+7. ⬜ Telegram OAuth (si se quiere verificar Telegram)
