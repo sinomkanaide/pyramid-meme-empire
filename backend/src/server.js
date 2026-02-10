@@ -9,6 +9,7 @@ const shopRoutes = require('./routes/shop');
 const referralsRoutes = require('./routes/referrals');
 const questsRoutes = require('./routes/quests');
 const adminRoutes = require('./routes/admin');
+const oauthRoutes = require('./routes/oauth');
 
 // Import Quest model for initialization
 const Quest = require('./models/Quest');
@@ -145,6 +146,7 @@ app.use('/api/shop', shopRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/quests', questsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/oauth', oauthRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -189,6 +191,11 @@ const runMigrations = async () => {
       prize_usdc DECIMAL(10,2) NOT NULL,
       description TEXT DEFAULT ''
     )`,
+    // OAuth columns
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_id VARCHAR(100)',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_username VARCHAR(100)',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(100)',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100)',
   ];
 
   for (const sql of migrations) {

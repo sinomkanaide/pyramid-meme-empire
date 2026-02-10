@@ -164,6 +164,9 @@ const PyramidMemeEmpireV5 = () => {
   // Smart Verification state (per-quest, memory only - resets on reload)
   const [questVerifyState, setQuestVerifyState] = useState({});
   // questVerifyState[questId] = { goClickedAt, attempts, cooldownUntil, status, statusMsg }
+
+  // Connected accounts (OAuth)
+  const [connectedAccounts, setConnectedAccounts] = useState({ twitter: { connected: false, username: null }, discord: { connected: false, username: null } });
   
   const coinSounds = useRef([]);
   const levelUpSound = useRef(null);
@@ -424,6 +427,7 @@ const PyramidMemeEmpireV5 = () => {
           // Load all data from backend
           await loadProgress();
           await loadLeaderboard();
+          loadConnectedAccounts(); // non-blocking
 
           // Load quests (token is now set)
           try {
@@ -918,15 +922,22 @@ const PyramidMemeEmpireV5 = () => {
     }
   };
 
-  // Platform-specific verification messages
-  const VERIFY_MESSAGES = {
-    twitter_follow: { checking: 'Checking Twitter followers list...', fail: 'Follow not detected on @handle' },
-    twitter_like: { checking: 'Checking tweet interactions...', fail: 'Like not detected on this tweet' },
-    twitter_retweet: { checking: 'Scanning retweet history...', fail: 'Retweet not detected' },
-    telegram_join: { checking: 'Checking Telegram group members...', fail: 'Membership not detected' },
-    discord_join: { checking: 'Checking Discord server members...', fail: 'Member not found in server' },
+  // Platform-specific verification messages (uses real usernames when connected)
+  const getVerifyMsg = (reqType) => {
+    const tw = connectedAccounts.twitter;
+    const dc = connectedAccounts.discord;
+    const tUser = tw.connected ? `@${tw.username}` : 'your account';
+    const dUser = dc.connected ? dc.username : 'your account';
+
+    const msgs = {
+      twitter_follow: { checking: `Checking if ${tUser} follows @tapkamun...`, fail: `Follow not detected for ${tUser}` },
+      twitter_like: { checking: `Scanning ${tUser}'s recent likes...`, fail: `Like not detected for ${tUser}` },
+      twitter_retweet: { checking: `Scanning ${tUser}'s retweet history...`, fail: `Retweet not detected for ${tUser}` },
+      telegram_join: { checking: 'Checking Telegram group members...', fail: 'Membership not detected' },
+      discord_join: { checking: `Checking if ${dUser} is in the server...`, fail: `${dUser} not found in server` },
+    };
+    return msgs[reqType] || { checking: 'Verifying with platform...', fail: 'Task not detected' };
   };
-  const getVerifyMsg = (reqType) => VERIFY_MESSAGES[reqType] || { checking: 'Verifying with platform...', fail: 'Task not detected' };
 
   // Cooldown timer effect
   useEffect(() => {
@@ -1052,6 +1063,59 @@ const PyramidMemeEmpireV5 = () => {
     }));
     await completeQuest(quest.quest_id);
   };
+
+  // ========== CONNECTED ACCOUNTS (OAuth) ==========
+  const loadConnectedAccounts = async () => {
+    try {
+      const data = await apiCall('/api/oauth/status');
+      setConnectedAccounts(data);
+    } catch (err) {
+      console.log('[OAuth] Status check failed:', err.message);
+    }
+  };
+
+  const connectAccount = async (platform) => {
+    try {
+      const origin = window.location.origin;
+      const data = await apiCall(`/api/oauth/${platform}/connect?origin=${encodeURIComponent(origin)}`);
+      if (data.url) window.location.href = data.url;
+    } catch (err) {
+      showNotification(`❌ Failed to connect ${platform}`);
+    }
+  };
+
+  const disconnectAccount = async (platform) => {
+    try {
+      await apiCall(`/api/oauth/${platform}/disconnect`, { method: 'POST' });
+      setConnectedAccounts(prev => ({ ...prev, [platform]: { connected: false, username: null } }));
+      showNotification(`Disconnected ${platform === 'twitter' ? 'X (Twitter)' : 'Discord'}`);
+    } catch (err) {
+      showNotification(`❌ Failed to disconnect`);
+    }
+  };
+
+  // Handle OAuth callbacks from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    for (const platform of ['twitter', 'discord']) {
+      const status = params.get(platform);
+      if (status === 'connected') {
+        const username = params.get('username');
+        setConnectedAccounts(prev => ({ ...prev, [platform]: { connected: true, username } }));
+        showNotification(`✅ ${platform === 'twitter' ? 'X (Twitter)' : 'Discord'} connected: ${username}`);
+      } else if (status === 'error') {
+        showNotification(`❌ ${platform === 'twitter' ? 'X' : 'Discord'} connection failed`);
+      } else if (status === 'cancelled') {
+        showNotification(`${platform === 'twitter' ? 'X' : 'Discord'} connection cancelled`);
+      }
+    }
+
+    // Clean URL params
+    if (params.has('twitter') || params.has('discord')) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   // ========== USDC PAYMENT FUNCTION ==========
   const purchaseItem = async (itemType) => {
@@ -2644,6 +2708,37 @@ const PyramidMemeEmpireV5 = () => {
                   <span className="xp-value">{totalQuestXP.toLocaleString()}</span>
                 </div>
 
+                {/* Connected Accounts */}
+                {isAuthenticated && (
+                  <div className="connected-accounts">
+                    <div className="connected-accounts-title">CONNECTED ACCOUNTS</div>
+                    <div className="connected-accounts-row">
+                      <div className="account-item">
+                        <span className="account-icon">𝕏</span>
+                        {connectedAccounts.twitter.connected ? (
+                          <>
+                            <span className="account-username">@{connectedAccounts.twitter.username}</span>
+                            <button className="account-btn account-btn-disconnect" onClick={() => disconnectAccount('twitter')}>✕</button>
+                          </>
+                        ) : (
+                          <button className="account-btn account-btn-connect" onClick={() => connectAccount('twitter')}>Connect X</button>
+                        )}
+                      </div>
+                      <div className="account-item">
+                        <span className="account-icon">💬</span>
+                        {connectedAccounts.discord.connected ? (
+                          <>
+                            <span className="account-username">{connectedAccounts.discord.username}</span>
+                            <button className="account-btn account-btn-disconnect" onClick={() => disconnectAccount('discord')}>✕</button>
+                          </>
+                        ) : (
+                          <button className="account-btn account-btn-connect" onClick={() => connectAccount('discord')}>Connect Discord</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Loading state */}
                 {questsLoading && (
                   <div className="quests-loading">Loading quests...</div>
@@ -2656,6 +2751,10 @@ const PyramidMemeEmpireV5 = () => {
                     const isSocial = quest.verification_method === 'manual' && quest.type === 'social';
                     const isPartner = quest.verification_method === 'kiichain_api' || quest.verification_method === 'partner_api';
                     const hasGoVerify = (quest.external_url || isPartner) && (quest.type === 'social' || quest.type === 'partner' || isPartner);
+                    const reqType = quest.requirement_type || '';
+                    const needsTwitter = isSocial && reqType.startsWith('twitter_');
+                    const needsDiscord = isSocial && reqType.startsWith('discord_');
+                    const needsAccount = (needsTwitter && !connectedAccounts.twitter.connected) || (needsDiscord && !connectedAccounts.discord.connected);
                     const cooldownLeft = vs.cooldownUntil ? Math.max(0, Math.ceil((vs.cooldownUntil - Date.now()) / 1000)) : 0;
                     const isVerifying = vs.status === 'verifying';
                     const isCooldown = vs.status === 'cooldown' && cooldownLeft > 0;
@@ -2716,13 +2815,23 @@ const PyramidMemeEmpireV5 = () => {
                                 >
                                   GO
                                 </button>
-                                <button
-                                  className={`quest-btn quest-btn-verify ${isVerifying ? 'btn-loading' : ''} ${isCooldown ? 'btn-disabled' : ''} ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
-                                  onClick={() => verifyQuest(quest)}
-                                  disabled={isVerifying || isCooldown || completingQuest === quest.quest_id}
-                                >
-                                  {isVerifying ? '...' : isCooldown ? `${cooldownLeft}s` : completingQuest === quest.quest_id ? '...' : 'VERIFY'}
-                                </button>
+                                {needsAccount ? (
+                                  <button
+                                    className="quest-btn quest-btn-verify"
+                                    onClick={() => connectAccount(needsTwitter ? 'twitter' : 'discord')}
+                                    style={{ fontSize: 8, padding: '6px 8px' }}
+                                  >
+                                    {needsTwitter ? '🔗 X' : '🔗 DC'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    className={`quest-btn quest-btn-verify ${isVerifying ? 'btn-loading' : ''} ${isCooldown ? 'btn-disabled' : ''} ${completingQuest === quest.quest_id ? 'btn-loading' : ''}`}
+                                    onClick={() => verifyQuest(quest)}
+                                    disabled={isVerifying || isCooldown || completingQuest === quest.quest_id}
+                                  >
+                                    {isVerifying ? '...' : isCooldown ? `${cooldownLeft}s` : completingQuest === quest.quest_id ? '...' : 'VERIFY'}
+                                  </button>
+                                )}
                               </div>
                             ) : (
                               <button
@@ -3984,6 +4093,69 @@ const PyramidMemeEmpireV5 = () => {
           border: 2px solid #FFD700;
           border-radius: 12px;
           margin-bottom: 16px;
+        }
+
+        .connected-accounts {
+          margin-bottom: 16px;
+          padding: 12px;
+          background: rgba(139, 92, 246, 0.1);
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          border-radius: 12px;
+        }
+        .connected-accounts-title {
+          font-size: 9px;
+          font-weight: 800;
+          color: #8b5cf6;
+          letter-spacing: 1.5px;
+          text-align: center;
+          margin-bottom: 8px;
+        }
+        .connected-accounts-row {
+          display: flex;
+          gap: 8px;
+        }
+        .account-item {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 10px;
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .account-icon {
+          font-size: 14px;
+          flex-shrink: 0;
+        }
+        .account-username {
+          font-size: 9px;
+          color: #00FF00;
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1;
+        }
+        .account-btn {
+          border: none;
+          border-radius: 6px;
+          font-family: inherit;
+          font-size: 8px;
+          font-weight: 700;
+          cursor: pointer;
+          padding: 4px 8px;
+          transition: all 0.2s;
+        }
+        .account-btn-connect {
+          background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+          color: #fff;
+        }
+        .account-btn-disconnect {
+          background: rgba(255, 0, 0, 0.3);
+          color: #ff4444;
+          padding: 4px 6px;
+          font-size: 10px;
         }
 
         .xp-icon {
