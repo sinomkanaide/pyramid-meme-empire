@@ -245,13 +245,17 @@ const PyramidMemeEmpireV5 = () => {
 
     // If no providers array, check individually
     if (wallets.length === 0) {
-      // Check Phantom
+      // Check Phantom's dedicated ethereum provider first (most reliable)
       if (window.phantom?.ethereum) {
         wallets.push({ provider: window.phantom.ethereum, name: 'Phantom', icon: '👻' });
       }
       // Check MetaMask (but not if it's actually Phantom pretending)
       if (window.ethereum?.isMetaMask && !window.ethereum?.isPhantom) {
         wallets.push({ provider: window.ethereum, name: 'MetaMask', icon: '🦊' });
+      }
+      // If Phantom is hijacking window.ethereum and we haven't added it yet
+      if (window.ethereum?.isPhantom && !wallets.find(w => w.name === 'Phantom')) {
+        wallets.push({ provider: window.ethereum, name: 'Phantom', icon: '👻' });
       }
       // Fallback: any ethereum provider
       if (wallets.length === 0 && window.ethereum) {
@@ -310,6 +314,17 @@ const PyramidMemeEmpireV5 = () => {
           showNotification('❌ CONNECTION REJECTED');
         } else if (err.message?.includes('service worker')) {
           showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
+        } else if (err.message?.includes('Unexpected error') || err.message === 'Me: Unexpected error') {
+          // Phantom EVM bridge error - try alternate provider or retry
+          console.warn(`${name} EVM bridge error, attempting fallback...`);
+          const wallets = detectWallets();
+          const alternate = wallets.find(w => w.name !== name);
+          if (alternate) {
+            showNotification(`⚠️ ${name.toUpperCase()} ERROR - TRYING ${alternate.name.toUpperCase()}...`);
+            setIsConnecting(false);
+            return connectWallet(alternate);
+          }
+          showNotification(`❌ ${name.toUpperCase()} ERROR - UNLOCK WALLET & RETRY`);
         } else {
           showNotification(`❌ ${name.toUpperCase()} ERROR - TRY AGAIN`);
         }
