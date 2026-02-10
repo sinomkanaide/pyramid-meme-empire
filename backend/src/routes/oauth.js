@@ -43,23 +43,30 @@ router.get('/twitter/connect', authenticateToken, async (req, res) => {
       codeVerifier,
       origin,
       platform: 'twitter',
-      expiresAt: Date.now() + 600000 // 10 minutes
+      expiresAt: Date.now() + 600000
     });
 
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: process.env.TWITTER_CLIENT_ID,
-      redirect_uri: process.env.TWITTER_CALLBACK_URL,
-      scope: 'tweet.read users.read follows.read',
-      state,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-    });
+    const clientId = process.env.TWITTER_CLIENT_ID;
+    const redirectUri = process.env.TWITTER_CALLBACK_URL;
+    const scope = 'tweet.read users.read';
 
-    console.log(`[OAuth] Twitter connect initiated for user ${userId}`);
-    res.json({
-      url: `https://twitter.com/i/oauth2/authorize?${params.toString()}`
-    });
+    // Build URL manually to ensure correct encoding (%20 not +)
+    const url = `https://twitter.com/i/oauth2/authorize` +
+      `?response_type=code` +
+      `&client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${encodeURIComponent(scope)}` +
+      `&state=${state}` +
+      `&code_challenge=${codeChallenge}` +
+      `&code_challenge_method=S256`;
+
+    console.log(`[Twitter OAuth] User: ${userId}`);
+    console.log(`[Twitter OAuth] Client ID: ${clientId?.slice(0, 8)}...`);
+    console.log(`[Twitter OAuth] Redirect URI: ${redirectUri}`);
+    console.log(`[Twitter OAuth] Scope: ${scope}`);
+    console.log(`[Twitter OAuth] URL: ${url.slice(0, 120)}...`);
+
+    res.json({ url });
   } catch (error) {
     console.error('[OAuth] Twitter connect error:', error);
     res.status(500).json({ error: 'Failed to initiate Twitter connection' });
@@ -68,6 +75,7 @@ router.get('/twitter/connect', authenticateToken, async (req, res) => {
 
 // GET /oauth/twitter/callback - Handle Twitter callback
 router.get('/twitter/callback', async (req, res) => {
+  console.log(`[Twitter OAuth] Callback received:`, { code: req.query.code?.slice(0, 10), state: req.query.state?.slice(0, 10), error: req.query.error });
   const { code, state, error: oauthError } = req.query;
 
   const storedState = oauthStates.get(state);
