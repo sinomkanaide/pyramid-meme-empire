@@ -8,9 +8,9 @@
   "theme_color": "#8b5cf6",
   "icons": [
     {
-      "src": "https://cdn.discordapp.com/attachments/1470643014711120015/1470649923320942785/logoTAPKAMUN.png",
+      "src": "/logo.webp",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/webp"
     }
   ]
 }

@@ -67,7 +67,7 @@ export default function Login({ apiUrl, onLogin }) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <img src="https://cdn.discordapp.com/attachments/1470643014711120015/1470649923320942785/logoTAPKAMUN.png" alt="TAPKAMUN" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 10 }} />
+          <img src="https://tapkamun.fun/logo.webp" alt="TAPKAMUN" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 10 }} />
         </div>
         <h1 className="login-title">Admin Panel</h1>
         <p className="login-subtitle">TAPKAMUN.FUN</p>
