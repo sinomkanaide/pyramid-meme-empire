@@ -374,74 +374,87 @@ const PyramidMemeEmpireV5 = () => {
       setWalletAddress(wallet);
       connectedProviderRef.current = provider; // Save provider for purchases
 
-      // Authenticate with backend
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const refCode = urlParams.get('ref');
-
-        // Get nonce
-        const { message } = await apiCall(`/api/auth/nonce/${wallet}`);
-
-        // Sign message with timeout
-        let signature;
+      // Authenticate with backend (with auto-retry on nonce expiry)
+      const maxAuthRetries = 2;
+      for (let authAttempt = 0; authAttempt < maxAuthRetries; authAttempt++) {
         try {
-          signature = await Promise.race([
-            provider.request({
-              method: 'personal_sign',
-              params: [message, wallet],
-            }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('SIGN_TIMEOUT')), 60000)
-            )
-          ]);
-        } catch (signError) {
-          if (signError.message === 'SIGN_TIMEOUT') {
-            showNotification('⏱️ SIGN TIMEOUT - TRY AGAIN');
-          } else if (signError.code === 4001) {
-            showNotification('❌ SIGNATURE REJECTED');
-          } else if (signError.message?.includes('service worker')) {
-            showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
-          } else {
-            showNotification('❌ SIGN FAILED - TRY AGAIN');
+          const urlParams = new URLSearchParams(window.location.search);
+          const refCode = urlParams.get('ref');
+
+          // Get nonce
+          if (authAttempt > 0) console.log('[Auth] Retrying with fresh nonce...');
+          const { message } = await apiCall(`/api/auth/nonce/${wallet}`);
+
+          // Sign message with timeout
+          let signature;
+          try {
+            signature = await Promise.race([
+              provider.request({
+                method: 'personal_sign',
+                params: [message, wallet],
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('SIGN_TIMEOUT')), 60000)
+              )
+            ]);
+          } catch (signError) {
+            if (signError.message === 'SIGN_TIMEOUT') {
+              showNotification('⏱️ SIGN TIMEOUT - TRY AGAIN');
+            } else if (signError.code === 4001) {
+              showNotification('❌ SIGNATURE REJECTED');
+            } else if (signError.message?.includes('service worker')) {
+              showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
+            } else {
+              showNotification('❌ SIGN FAILED - TRY AGAIN');
+            }
+            console.error('Sign error:', signError);
+            setWalletAddress(null);
+            return;
           }
-          console.error('Sign error:', signError);
-          setWalletAddress(null);
-          return;
-        }
 
-        // Verify and get token
-        const authData = await apiCall('/api/auth/verify', {
-          method: 'POST',
-          body: JSON.stringify({ walletAddress: wallet, signature, referralCode: refCode }),
-        });
+          // Verify and get token
+          const authData = await apiCall('/api/auth/verify', {
+            method: 'POST',
+            body: JSON.stringify({ walletAddress: wallet, signature, referralCode: refCode }),
+          });
 
-        setToken(authData.token);
-        setIsAuthenticated(true);
+          setToken(authData.token);
+          setIsAuthenticated(true);
 
-        // Load all data from backend
-        await loadProgress();
-        await loadLeaderboard();
+          // Load all data from backend
+          await loadProgress();
+          await loadLeaderboard();
 
-        // Load quests (token is now set)
-        try {
-          setQuestsLoading(true);
-          const questsData = await apiCall('/api/quests');
-          setQuests(questsData.quests || []);
-          setTotalQuestXP(questsData.totalQuestXP || 0);
-          setQuestsLoading(false);
-        } catch (questErr) {
-          console.error('Load quests error:', questErr);
-          setQuestsLoading(false);
-        }
+          // Load quests (token is now set)
+          try {
+            setQuestsLoading(true);
+            const questsData = await apiCall('/api/quests');
+            setQuests(questsData.quests || []);
+            setTotalQuestXP(questsData.totalQuestXP || 0);
+            setQuestsLoading(false);
+          } catch (questErr) {
+            console.error('Load quests error:', questErr);
+            setQuestsLoading(false);
+          }
 
-        playWhoosh();
-        showNotification(`🎉 CONNECTED WITH ${name.toUpperCase()}!`);
-      } catch (authError) {
-        console.error('Auth error:', authError);
-        if (authError.message?.includes('fetch')) {
-          showNotification('🌐 NETWORK ERROR - CHECK CONNECTION');
-        } else {
-          showNotification('⚠️ AUTH FAILED - DEMO MODE');
+          playWhoosh();
+          showNotification(`🎉 CONNECTED WITH ${name.toUpperCase()}!`);
+          break; // Success - exit retry loop
+        } catch (authError) {
+          console.error(`Auth error (attempt ${authAttempt + 1}):`, authError);
+
+          // Auto-retry on nonce expiry
+          if (authError.message?.includes('Nonce expired') && authAttempt < maxAuthRetries - 1) {
+            console.log('[Auth] Nonce expired, requesting fresh nonce...');
+            showNotification('🔄 REFRESHING SESSION...');
+            continue; // Retry with new nonce
+          }
+
+          if (authError.message?.includes('fetch')) {
+            showNotification('🌐 NETWORK ERROR - CHECK CONNECTION');
+          } else {
+            showNotification('⚠️ AUTH FAILED - DEMO MODE');
+          }
         }
       }
     } catch (error) {

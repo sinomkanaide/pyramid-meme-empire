@@ -14,6 +14,9 @@ const router = express.Router();
 // Store nonces temporarily (in production, use Redis)
 const nonces = new Map();
 
+// Nonce TTL: 5 minutes
+const NONCE_TTL_MS = 300000;
+
 // GET /auth/nonce - Get nonce for wallet signature
 router.get('/nonce/:walletAddress', (req, res) => {
   const { walletAddress } = req.params;
@@ -26,13 +29,13 @@ router.get('/nonce/:walletAddress', (req, res) => {
   const timestamp = Date.now();
   const message = generateAuthMessage(walletAddress, nonce, timestamp);
 
-  // Store nonce and timestamp for 5 minutes
   nonces.set(walletAddress.toLowerCase(), {
     nonce,
     timestamp,
-    expiresAt: Date.now() + 300000
+    expiresAt: Date.now() + NONCE_TTL_MS
   });
 
+  console.log(`[Nonce] Created for ${walletAddress.slice(0, 8)}... TTL: ${NONCE_TTL_MS / 1000}s`);
   res.json({ message, nonce });
 });
 
@@ -54,7 +57,17 @@ router.post('/verify',
       // Get stored nonce and timestamp
       const storedData = nonces.get(walletAddress.toLowerCase());
 
-      if (!storedData || Date.now() > storedData.expiresAt) {
+      if (!storedData) {
+        console.log(`[Verify] No nonce found for ${walletAddress.slice(0, 8)}...`);
+        return res.status(400).json({ error: 'Nonce expired or not found. Request a new one.' });
+      }
+
+      const nonceAge = Date.now() - storedData.timestamp;
+      console.log(`[Verify] Nonce age: ${(nonceAge / 1000).toFixed(1)}s for ${walletAddress.slice(0, 8)}...`);
+
+      if (Date.now() > storedData.expiresAt) {
+        console.log(`[Verify] Nonce EXPIRED (age: ${(nonceAge / 1000).toFixed(1)}s, TTL: ${NONCE_TTL_MS / 1000}s)`);
+        nonces.delete(walletAddress.toLowerCase());
         return res.status(400).json({ error: 'Nonce expired or not found. Request a new one.' });
       }
 
