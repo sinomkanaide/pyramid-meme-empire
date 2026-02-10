@@ -2377,7 +2377,7 @@ const PyramidMemeEmpireV5 = () => {
 
         {/* Header */}
         <header className="header">
-          <div className="logo"><img src="/logo.webp" alt="TAPKAMUN" style={{ height: 32, verticalAlign: 'middle' }} /></div>
+          <div className="logo"><img src="/banner.webp" alt="TAPKAMUN.FUN" /></div>
           {walletAddress ? (
             <div className="wallet-badge">
               {walletAddress.slice(0, 4)}...{walletAddress.slice(-3)}
@@ -3283,10 +3283,10 @@ const PyramidMemeEmpireV5 = () => {
           align-items: center;
         }
         .logo img {
-          height: 32px;
+          height: 22px;
           width: auto;
           object-fit: contain;
-          filter: drop-shadow(0 0 8px rgba(245, 200, 0, 0.6));
+          filter: drop-shadow(0 0 6px rgba(245, 200, 0, 0.5));
         }
 
         .wallet-badge {
