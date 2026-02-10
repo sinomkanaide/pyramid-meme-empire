@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://tapkamun.fun/sitemap.xml

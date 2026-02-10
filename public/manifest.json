@@ -1,0 +1,16 @@
+{
+  "name": "TAPKAMUN",
+  "short_name": "TAPKAMUN",
+  "description": "Tap to earn on Base Network",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "https://cdn.discordapp.com/attachments/1470643014711120015/1470649923320942785/logoTAPKAMUN.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
