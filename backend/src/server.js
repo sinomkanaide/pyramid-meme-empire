@@ -10,6 +10,7 @@ const referralsRoutes = require('./routes/referrals');
 const questsRoutes = require('./routes/quests');
 const adminRoutes = require('./routes/admin');
 const oauthRoutes = require('./routes/oauth');
+const publicRoutes = require('./routes/public');
 
 // Import Quest model for initialization
 const Quest = require('./models/Quest');
@@ -147,6 +148,7 @@ app.use('/api/referrals', referralsRoutes);
 app.use('/api/quests', questsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/oauth', oauthRoutes);
+app.use('/api/public', publicRoutes);
 
 // 404 handler
 app.use((req, res) => {
