@@ -685,6 +685,7 @@ DISCORD_CALLBACK_URL=https://api.tapkamun.fun/api/oauth/discord/callback
 | 6993ba2 | feat: Twitter and Discord OAuth connection for quest verification |
 | 79b973e | fix: Twitter OAuth authorize endpoint and scopes |
 | 07949c3 | feat: public verification API for partner integrations (Galxe) |
+| 1b24485 | feat: add sitemap.xml for SEO |
 
 ### PUBLIC API PARA PARTNERS (Galxe / KiiChain)
 
@@ -727,5 +728,5 @@ curl https://api.tapkamun.fun/api/public/check/profile/0x323fF56B329F2bD3680007f
 4. ⬜ Progress bars visuales para milestone quests
 5. ⬜ Daily quests con reset
 6. ⬜ Quest rewards en $KAMUN tokens
-7. ⬜ Sitemap.xml para SEO completo
+7. ✅ ~~Sitemap.xml para SEO completo~~ - public/sitemap.xml
 8. ⬜ Telegram OAuth (si se quiere verificar Telegram)
