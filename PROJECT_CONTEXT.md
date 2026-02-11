@@ -684,13 +684,48 @@ DISCORD_CALLBACK_URL=https://api.tapkamun.fun/api/oauth/discord/callback
 | 667ad94 | fix: replace logo image with golden TAPKAMUN text in header |
 | 6993ba2 | feat: Twitter and Discord OAuth connection for quest verification |
 | 79b973e | fix: Twitter OAuth authorize endpoint and scopes |
+| 07949c3 | feat: public verification API for partner integrations (Galxe) |
+
+### PUBLIC API PARA PARTNERS (Galxe / KiiChain)
+
+- **Commit**: 07949c3
+- **Archivo**: `backend/src/routes/public.js` (NUEVO)
+- **Docs**: `backend/PUBLIC_API.md`
+- **CORS**: Abierto para todos los orígenes (`origin: '*'`)
+- **Rate Limit**: 60 req/min por IP
+- **Auth**: NO requiere autenticación
+
+**Endpoints (todos GET, sin auth):**
+```
+/api/public/check/premium/:address      - Premium activo?
+/api/public/check/battlepass/:address    - Battle Pass activo?
+/api/public/check/paid/:address          - Premium O Battle Pass?
+/api/public/check/level/:address?min=N   - Nivel del usuario
+/api/public/check/taps/:address?min=N    - Taps totales
+/api/public/check/quest/:questId/:address - Quest completada?
+/api/public/check/profile/:address       - Perfil completo
+```
+
+**Galxe Config:**
+| Quest | Endpoint | Expression |
+|-------|----------|------------|
+| Comprar Premium/BP | `/api/public/check/paid/{address}` | `data.hasPaid === true` |
+| Nivel 10+ | `/api/public/check/level/{address}?min=10` | `data.meetsRequirement === true` |
+| 1000+ Taps | `/api/public/check/taps/{address}?min=1000` | `data.meetsRequirement === true` |
+| Quest #1 completada | `/api/public/check/quest/1/{address}` | `data.questCompleted === true` |
+
+**Test:**
+```bash
+curl https://api.tapkamun.fun/api/public/check/profile/0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027
+```
 
 ### PENDIENTES
 
 1. ✅ ~~Verificar OAuth en producción con cuentas reales~~ - FUNCIONANDO
-2. ⬜ Agregar `follows.read` scope si Twitter lo permite
-3. ⬜ Progress bars visuales para milestone quests
-4. ⬜ Daily quests con reset
-5. ⬜ Quest rewards en $KAMUN tokens
-6. ⬜ Sitemap.xml para SEO completo
-7. ⬜ Telegram OAuth (si se quiere verificar Telegram)
+2. ✅ ~~Public API para partners~~ - FUNCIONANDO
+3. ⬜ Agregar `follows.read` scope si Twitter lo permite
+4. ⬜ Progress bars visuales para milestone quests
+5. ⬜ Daily quests con reset
+6. ⬜ Quest rewards en $KAMUN tokens
+7. ⬜ Sitemap.xml para SEO completo
+8. ⬜ Telegram OAuth (si se quiere verificar Telegram)
