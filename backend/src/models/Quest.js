@@ -1,16 +1,17 @@
 const db = require('../config/database');
+const { calculateLevelFromXp } = require('./GameProgress');
 
-// XP rewards mapping for existing quests (since reward_amount is null in DB)
+// Default XP rewards (used when reward_amount is null in DB)
 const XP_REWARDS = {
-  'twitter_follow': 500,
-  'twitter_like': 300,
-  'twitter_retweet': 800,
-  'discord_join': 500,
-  'telegram_join': 500,
-  'level_milestone': 2000,
-  'tap_milestone': 1000,
-  'referral_milestone': 2500,
-  'partner_quest': 3000
+  'twitter_follow': 50,
+  'twitter_like': 25,
+  'twitter_retweet': 50,
+  'discord_join': 50,
+  'telegram_join': 50,
+  'level_milestone': 100,
+  'tap_milestone': 75,
+  'referral_milestone': 150,
+  'partner_quest': 0
 };
 
 class Quest {
@@ -45,11 +46,10 @@ class Quest {
   static transformQuest(dbQuest) {
     if (!dbQuest) return null;
 
-    // Get XP reward based on requirement_type
-    // KiiChain partner quest gives +20% tap bonus instead of XP
+    // Get XP reward (parseInt to handle NUMERIC column returning "35.0000000")
     const xpReward = dbQuest.requirement_type === 'partner_quest'
       ? 0
-      : (dbQuest.reward_amount || XP_REWARDS[dbQuest.requirement_type] || 500);
+      : (parseInt(dbQuest.reward_amount) || XP_REWARDS[dbQuest.requirement_type] || 50);
 
     // Determine verification method
     let verificationMethod = 'manual';
@@ -193,25 +193,40 @@ class Quest {
   }
 
   // Complete a quest for user
-  static async complete(userId, questId, xpEarned) {
+  static async complete(userId, questId, xpEarned, isPremium = false) {
     try {
+      const xp = parseInt(xpEarned) || 0;
+
       const result = await db.query(`
         INSERT INTO quest_completions (user_id, quest_id, xp_earned, is_verified)
         VALUES ($1, $2, $3, true)
         ON CONFLICT (user_id, quest_id) DO NOTHING
         RETURNING *
-      `, [userId, String(questId), xpEarned]);
+      `, [userId, String(questId), xp]);
 
       if (result.rows.length === 0) {
         return null; // Already completed
       }
 
-      // Add XP to user's game_progress (as bricks)
-      await db.query(`
+      // Add XP and recalculate level
+      const updated = await db.query(`
         UPDATE game_progress
         SET bricks = bricks + $1, updated_at = NOW()
         WHERE user_id = $2
-      `, [xpEarned, userId]);
+        RETURNING bricks
+      `, [xp, userId]);
+
+      if (updated.rows.length > 0) {
+        const newBricks = parseInt(updated.rows[0].bricks) || 0;
+        const calculatedLevel = calculateLevelFromXp(newBricks);
+        const FREE_USER_MAX_LEVEL = 3;
+        const newLevel = (!isPremium && calculatedLevel > FREE_USER_MAX_LEVEL)
+          ? FREE_USER_MAX_LEVEL : calculatedLevel;
+        await db.query(
+          'UPDATE game_progress SET level = $1 WHERE user_id = $2',
+          [newLevel, userId]
+        );
+      }
 
       return result.rows[0];
     } catch (error) {

@@ -230,8 +230,8 @@ router.post('/complete', async (req, res) => {
         console.log(`[Quests] KiiChain bonus applied: +20% for 30 days`);
       }
 
-      // Complete the quest
-      const completion = await Quest.complete(req.user.id, questId, quest.xp_reward);
+      // Complete the quest (pass isPremium for level cap check)
+      const completion = await Quest.complete(req.user.id, questId, quest.xp_reward, req.user.isPremium);
 
       if (!completion) {
         return res.status(400).json({ error: 'Failed to complete quest' });

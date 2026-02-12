@@ -578,7 +578,7 @@ router.post('/quests', async (req, res) => {
       requirement_type,
       requirement_value || 1,
       JSON.stringify(metadata),
-      reward_amount || null,
+      reward_amount ? parseInt(reward_amount) : null,
       sort_order || 99
     ]);
 
@@ -603,7 +603,7 @@ router.put('/quests/:id', async (req, res) => {
     if (title !== undefined) { paramCount++; updates.push(`title = $${paramCount}`); values.push(title); }
     if (description !== undefined) { paramCount++; updates.push(`description = $${paramCount}`); values.push(description); }
     if (icon !== undefined) { paramCount++; updates.push(`icon = $${paramCount}`); values.push(icon); }
-    if (xp_reward !== undefined) { paramCount++; updates.push(`reward_amount = $${paramCount}`); values.push(xp_reward); }
+    if (xp_reward !== undefined) { paramCount++; updates.push(`reward_amount = $${paramCount}`); values.push(parseInt(xp_reward) || 0); }
     if (is_active !== undefined) { paramCount++; updates.push(`is_active = $${paramCount}`); values.push(is_active); }
     if (sort_order !== undefined) { paramCount++; updates.push(`sort_order = $${paramCount}`); values.push(sort_order); }
 
