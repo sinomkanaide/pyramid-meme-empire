@@ -52,12 +52,19 @@ class Quest {
       : (parseInt(dbQuest.reward_amount) || XP_REWARDS[dbQuest.requirement_type] || 50);
 
     // Determine verification method
-    let verificationMethod = 'manual';
-    if (dbQuest.requirement_type?.includes('milestone') || dbQuest.requirement_type?.includes('referral')) {
+    let verificationMethod = 'manual'; // default: social quests (GO + VERIFY)
+    const reqType = dbQuest.requirement_type || '';
+
+    // Game/milestone quests - auto-verified by backend (CLAIM button only)
+    if (reqType.includes('milestone') || reqType.includes('referral') ||
+        reqType.includes('tap') || reqType.includes('purchase') ||
+        reqType.includes('brick') || reqType.includes('stack') ||
+        reqType.includes('level')) {
       verificationMethod = 'internal';
     }
-    if (dbQuest.requirement_type === 'partner_quest') {
-      // Check if quest has a custom API endpoint configured
+
+    // Partner quests override
+    if (reqType === 'partner_quest') {
       if (dbQuest.requirement_metadata?.api_endpoint) {
         verificationMethod = 'partner_api';
       } else {
@@ -237,12 +244,13 @@ class Quest {
 
   // Get user's progress for milestone quests
   static async getUserProgress(userId) {
-    let progress = { level: 1, total_taps: 0, bricks: 0 };
+    let progress = { level: 1, total_taps: 0, bricks: 0, total_bricks_earned: 0 };
     let verifiedReferrals = 0;
+    let purchaseCount = 0;
 
     try {
       const progressResult = await db.query(`
-        SELECT gp.level, gp.total_taps, gp.bricks
+        SELECT gp.level, gp.total_taps, gp.bricks, gp.total_bricks_earned
         FROM game_progress gp
         WHERE gp.user_id = $1
       `, [userId]);
@@ -262,11 +270,24 @@ class Quest {
       console.error('getUserProgress - referrals error:', error.message);
     }
 
+    try {
+      const purchaseResult = await db.query(`
+        SELECT COUNT(*) as count
+        FROM transactions
+        WHERE user_id = $1 AND status = 'confirmed'
+      `, [userId]);
+      purchaseCount = parseInt(purchaseResult.rows[0]?.count || 0);
+    } catch (error) {
+      console.error('getUserProgress - purchases error:', error.message);
+    }
+
     return {
       level: progress.level || 1,
       totalTaps: progress.total_taps || 0,
       totalBricks: progress.bricks || 0,
-      verifiedReferrals
+      totalBricksEarned: parseInt(progress.total_bricks_earned) || 0,
+      verifiedReferrals,
+      purchaseCount
     };
   }
 
@@ -314,10 +335,19 @@ class Quest {
 
     if (reqType.includes('brick') || reqType.includes('stack')) {
       return {
-        canComplete: progress.totalBricks >= reqValue,
-        current: progress.totalBricks,
+        canComplete: progress.totalBricksEarned >= reqValue,
+        current: progress.totalBricksEarned,
         required: reqValue,
-        progressText: `${progress.totalBricks.toLocaleString()}/${reqValue.toLocaleString()} bricks`
+        progressText: `${progress.totalBricksEarned.toLocaleString()}/${reqValue.toLocaleString()} bricks`
+      };
+    }
+
+    if (reqType.includes('purchase')) {
+      return {
+        canComplete: progress.purchaseCount >= reqValue,
+        current: progress.purchaseCount,
+        required: reqValue,
+        progressText: `${progress.purchaseCount}/${reqValue} purchases`
       };
     }
 

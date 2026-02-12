@@ -2761,9 +2761,10 @@ const PyramidMemeEmpireV5 = () => {
                 <div className="quests-list">
                   {quests.map((quest) => {
                     const vs = questVerifyState[quest.quest_id] || {};
-                    const isSocial = quest.verification_method === 'manual' && quest.type === 'social';
+                    const isSocial = quest.verification_method === 'manual';
                     const isPartner = quest.verification_method === 'kiichain_api' || quest.verification_method === 'partner_api';
-                    const hasGoVerify = (quest.external_url || isPartner) && (quest.type === 'social' || quest.type === 'partner' || isPartner);
+                    const isInternal = quest.verification_method === 'internal';
+                    const hasGoVerify = !isInternal;
                     const reqType = quest.requirement_type || '';
                     const needsTwitter = isSocial && reqType.startsWith('twitter_');
                     const needsDiscord = isSocial && reqType.startsWith('discord_');

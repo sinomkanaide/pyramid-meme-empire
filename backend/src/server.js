@@ -198,6 +198,8 @@ const runMigrations = async () => {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_username VARCHAR(100)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(100)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100)',
+    // Fix referral quest: require 3 verified referrals, reward 450 XP
+    `UPDATE quests SET requirement_value = 3, reward_amount = 450 WHERE requirement_type = 'referral_milestone'`,
   ];
 
   for (const sql of migrations) {
