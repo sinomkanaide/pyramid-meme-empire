@@ -1,7 +1,7 @@
 # TAPKAMUN.FUN - Project Context (formerly Pyramid Meme Empire)
 
-> Last Updated: 2026-02-10
-> Status: **Production Ready** - OAuth verified, Branding complete, All systems GO
+> Last Updated: 2026-02-11
+> Status: **Production Ready** - Quest XP fixed, Wallet detection fixed, All systems GO
 
 ---
 
@@ -15,7 +15,7 @@
 
 ### Ultimo Commit
 ```
-79b973e - fix: Twitter OAuth authorize endpoint and scopes
+ac10dc3 - fix: quest XP bugs - level recalc, float parsing, lower defaults
 ```
 
 ### Features Status
@@ -27,7 +27,7 @@
 | Referral System | ✅ | Bonus +10% per verified referral |
 | Leaderboard | ✅ | Top 100 players |
 | Quest System | ✅ | 8 quests, GO/VERIFY working |
-| Multi-wallet | ✅ | MetaMask, Phantom, EVM bridge fallback |
+| Multi-wallet | ✅ | MetaMask, Phantom, Trust Wallet, deduplication |
 | Twitter OAuth | ✅ | PKCE flow, connect/disconnect/status |
 | Discord OAuth | ✅ | OAuth 2.0, connect/disconnect/status |
 | SEO / Branding | ✅ | OG tags, Twitter cards, manifest, robots.txt |
@@ -163,24 +163,30 @@ VITE_API_URL=https://api.tapkamun.fun
 ### 2. Quest System (8 quests)
 ```
 Social Quests (verification_method: 'manual'):
-1. Follow on X        - 500 XP  - twitter_follow
-2. Like Latest Post   - 300 XP  - twitter_like
-3. Retweet           - 800 XP  - twitter_retweet
-4. Join Discord      - 500 XP  - discord_join
-5. Join Telegram     - 500 XP  - telegram_join
+1. Follow on X        - 50 XP   - twitter_follow  (default, admin-editable)
+2. Like Latest Post   - 25 XP   - twitter_like    (default, admin-editable)
+3. Retweet           - 50 XP   - twitter_retweet  (default, admin-editable)
+4. Join Discord      - 50 XP   - discord_join     (default, admin-editable)
+5. Join Telegram     - 50 XP   - telegram_join    (default, admin-editable)
 
 Partner Quests:
-6. KiiChain Testnet  - 3000 XP - partner_quest
+6. KiiChain Testnet  - +20% tap bonus - partner_quest (no XP)
 
 Milestone Quests (verification_method: 'internal'):
-7. Reach Level 10    - 2000 XP - level_milestone
-8. Invite 5 Friends  - 2500 XP - referral_milestone
+7. Reach Level 10    - 100 XP  - level_milestone
+8. Invite 5 Friends  - 150 XP  - referral_milestone
 ```
+
+**Level XP Formula:** `100 * (level^1.5)` cumulative
+- Level 1→2: 100 XP | Level 2→3: 282 XP | Level 3→4: 519 XP
+- Free users capped at Level 3 (premium unlimited)
 
 ### 3. Multi-wallet Support
 - MetaMask (prioritario)
-- Phantom (detectado correctamente)
-- Otros wallets EVM compatibles
+- Phantom (detectado via window.phantom.ethereum)
+- Trust Wallet (detectado via isTrust/isTrustWallet)
+- Deduplication via Set (previene duplicados)
+- Auto-fallback si un wallet falla
 
 ---
 
@@ -730,3 +736,117 @@ curl https://api.tapkamun.fun/api/public/check/profile/0x323fF56B329F2bD3680007f
 6. ⬜ Quest rewards en $KAMUN tokens
 7. ✅ ~~Sitemap.xml para SEO completo~~ - public/sitemap.xml
 8. ⬜ Telegram OAuth (si se quiere verificar Telegram)
+
+---
+
+## SESIÓN 2026-02-11 - BUGFIXES: REFERRALS, QUEST XP, WALLET DETECTION
+
+### BUGS ENCONTRADOS Y ARREGLADOS
+
+#### 1. Referrals mostrando 3 para todos los usuarios
+- **Commit**: d771427
+- **Causa raíz**: `const [referrals, setReferrals] = useState(3)` hardcodeado en línea 105, nunca actualizado desde backend
+- **Display**: Línea 2486 usaba `{referrals}` en vez de `{referralStats.total}`
+- **Fix**: Eliminado el state `referrals` innecesario, display usa `{referralStats.total}` que ya se carga correctamente del backend vía `loadProgress()`
+
+#### 2. Quest XP no actualizaba el nivel
+- **Commit**: d771427
+- **Causa raíz**: `completeQuest()` en frontend no llamaba `loadProgress()` después de completar quest
+- **Fix**: Agregado `await loadProgress()` después del éxito, refresca level/XP/bricks en UI
+
+#### 3. Wallet detection - Trust Wallet duplica 4x MetaMask
+- **Commit**: 6e467b0
+- **Causa raíz**: Trust Wallet inyecta su provider con `isMetaMask: true` para compatibilidad. El loop no deduplicaba ni detectaba Trust Wallet
+- **Fix**: Deduplicación con `Set`, detección de Trust Wallet via `isTrust`/`isTrustWallet` antes de `isMetaMask`
+
+#### 4. Wallet detection - MetaMask + Phantom no muestra selector
+- **Commit**: 6e467b0
+- **Causa raíz**: `window.ethereum.providers` array puede existir pero solo contener MetaMask. El código solo revisaba `window.phantom.ethereum` cuando `wallets.length === 0`
+- **Fix**: SIEMPRE revisa `window.phantom.ethereum` como namespace dedicado, independiente del providers array
+
+#### 5. Quest XP muestra "35.0000000" (decimales)
+- **Commit**: ac10dc3
+- **Causa raíz**: Columna `reward_amount` en PostgreSQL es NUMERIC → pg driver retorna string `"35.0000000"` → `toLocaleString()` en string no formatea
+- **Fix**: `parseInt(dbQuest.reward_amount)` en `transformQuest()` + `parseInt(xp_reward)` en admin create/update
+
+#### 6. Quest completion retorna 400 "Failed to complete quest"
+- **Commit**: ac10dc3
+- **Causa raíz**: El string `"35.0000000"` se pasaba a INSERT en columna INTEGER `xp_earned` → PostgreSQL rechaza el cast → catch → return null → 400
+- **Fix**: `parseInt(xpEarned)` en `Quest.complete()` antes del INSERT
+
+#### 7. Quest completion no recalcula nivel en DB
+- **Commit**: ac10dc3
+- **Causa raíz**: `Quest.complete()` solo hacía `SET bricks = bricks + XP` sin actualizar `level`. Solo `processTap()` recalculaba nivel
+- **Fix**: Después de sumar bricks, recalcula nivel con `calculateLevelFromXp()`, respeta cap level 3 para free users, actualiza en DB
+
+#### 8. Quests dan demasiada XP (una quest sube 5 niveles)
+- **Commit**: ac10dc3
+- **Causa raíz**: Defaults hardcodeados: follow=500, like=300, retweet=800. Level 1→2 solo requiere 100 XP
+- **Fix**: Nuevos defaults: follow=50, like=25, retweet=50, discord=50, telegram=50
+
+### SAFETY NET: Auto-heal de niveles
+- **Archivo**: `backend/src/routes/game.js` - endpoint `/game/progress`
+- Al cargar progreso, recalcula nivel desde bricks
+- Si el nivel en DB no coincide → lo corrige automáticamente
+- Sana usuarios existentes con niveles desincronizados por el bug anterior
+
+### COMMITS ESTA SESIÓN
+
+| Commit | Descripción |
+|--------|-------------|
+| d771427 | fix: referrals showing 3 for all users + quest XP not updating level |
+| 6e467b0 | fix: wallet detection - Trust Wallet duplicates + MetaMask/Phantom selector |
+| ac10dc3 | fix: quest XP bugs - level recalc, float parsing, lower defaults |
+
+### ARCHIVOS MODIFICADOS
+
+```
+src/pyramid-meme-empire.jsx          - Referrals display fix, loadProgress after quest, wallet detection rewrite
+backend/src/models/Quest.js          - parseInt reward_amount, level recalc in complete(), lower XP defaults
+backend/src/routes/quests.js         - Pass isPremium to Quest.complete()
+backend/src/routes/admin.js          - parseInt xp_reward in create/update quest
+backend/src/routes/game.js           - Auto-heal stale levels in /game/progress
+```
+
+### QUEST XP FLOW (CORRECTO AHORA)
+
+```
+1. Frontend: completeQuest(questId) → POST /api/quests/complete
+2. Backend: Quest.complete(userId, questId, xpReward, isPremium)
+   a. parseInt(xpReward) → safe integer
+   b. INSERT quest_completions (xp_earned as INTEGER)
+   c. UPDATE game_progress SET bricks = bricks + xp
+   d. SELECT bricks → calculateLevelFromXp(newBricks)
+   e. Apply FREE_USER_MAX_LEVEL cap (level 3)
+   f. UPDATE game_progress SET level = newLevel
+3. Frontend: await loadProgress() → refreshes level, XP bar, bricks
+4. Frontend: showNotification("+{xp} XP!")
+```
+
+### WALLET DETECTION FLOW (CORRECTO AHORA)
+
+```
+detectWallets():
+1. Check window.ethereum.providers[] array
+   - Detect Trust Wallet (isTrust/isTrustWallet) → "Trust Wallet 🛡️"
+   - Detect MetaMask (isMetaMask && !isPhantom) → "MetaMask 🦊"
+   - Detect Phantom (isPhantom) → "Phantom 👻"
+2. ALWAYS check dedicated namespaces (even if providers found):
+   - window.phantom?.ethereum → "Phantom 👻" (if not already added)
+3. Fallback: check window.ethereum flags
+   - isTrust → Trust Wallet
+   - isMetaMask && !isPhantom && !isTrust → MetaMask
+   - isPhantom → Phantom
+4. Final fallback: window.ethereum → "Wallet 💳"
+5. Deduplication via Set (no duplicate names)
+6. If wallets > 1 → show selection modal
+```
+
+### PENDIENTES
+
+1. ⬜ Progress bars visuales para milestone quests
+2. ⬜ Daily quests con reset
+3. ⬜ Quest rewards en $KAMUN tokens
+4. ⬜ Telegram OAuth
+5. ⬜ Crear cuentas sociales reales (Twitter @tapkamun, Discord server, Telegram)
+6. ⬜ Actualizar URLs en quests con enlaces reales
