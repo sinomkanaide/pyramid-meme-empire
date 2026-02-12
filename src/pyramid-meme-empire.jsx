@@ -229,40 +229,51 @@ const PyramidMemeEmpireV5 = () => {
   }, [walletAddress]);
 
   // ========== WALLET ==========
-  // Detect all available wallet providers
+  // Detect all available wallet providers (deduped)
   const detectWallets = () => {
     const wallets = [];
+    const seen = new Set();
 
-    // Check providers array (when multiple extensions installed)
+    const addWallet = (provider, name, icon) => {
+      if (!seen.has(name)) {
+        seen.add(name);
+        wallets.push({ provider, name, icon });
+      }
+    };
+
+    // Check providers array (when multiple extensions inject into window.ethereum)
     if (window.ethereum?.providers?.length) {
       for (const p of window.ethereum.providers) {
-        if (p.isMetaMask && !p.isPhantom) {
-          wallets.push({ provider: p, name: 'MetaMask', icon: '🦊' });
+        if (p.isTrust || p.isTrustWallet) {
+          addWallet(p, 'Trust Wallet', '🛡️');
+        } else if (p.isMetaMask && !p.isPhantom) {
+          addWallet(p, 'MetaMask', '🦊');
         }
         if (p.isPhantom) {
-          wallets.push({ provider: p, name: 'Phantom', icon: '👻' });
+          addWallet(p, 'Phantom', '👻');
         }
       }
     }
 
-    // If no providers array, check individually
-    if (wallets.length === 0) {
-      // Check Phantom's dedicated ethereum provider first (most reliable)
-      if (window.phantom?.ethereum) {
-        wallets.push({ provider: window.phantom.ethereum, name: 'Phantom', icon: '👻' });
-      }
-      // Check MetaMask (but not if it's actually Phantom pretending)
-      if (window.ethereum?.isMetaMask && !window.ethereum?.isPhantom) {
-        wallets.push({ provider: window.ethereum, name: 'MetaMask', icon: '🦊' });
-      }
-      // If Phantom is hijacking window.ethereum and we haven't added it yet
-      if (window.ethereum?.isPhantom && !wallets.find(w => w.name === 'Phantom')) {
-        wallets.push({ provider: window.ethereum, name: 'Phantom', icon: '👻' });
-      }
-      // Fallback: any ethereum provider
-      if (wallets.length === 0 && window.ethereum) {
-        wallets.push({ provider: window.ethereum, name: 'Wallet', icon: '💳' });
-      }
+    // Always check dedicated namespaces (providers array may not include all wallets)
+    if (window.phantom?.ethereum && !seen.has('Phantom')) {
+      addWallet(window.phantom.ethereum, 'Phantom', '👻');
+    }
+
+    // Check window.ethereum flags as fallback
+    if (!seen.has('Trust Wallet') && window.ethereum?.isTrust) {
+      addWallet(window.ethereum, 'Trust Wallet', '🛡️');
+    }
+    if (!seen.has('MetaMask') && window.ethereum?.isMetaMask && !window.ethereum?.isPhantom && !window.ethereum?.isTrust) {
+      addWallet(window.ethereum, 'MetaMask', '🦊');
+    }
+    if (!seen.has('Phantom') && window.ethereum?.isPhantom) {
+      addWallet(window.ethereum, 'Phantom', '👻');
+    }
+
+    // Fallback: any ethereum provider
+    if (wallets.length === 0 && window.ethereum) {
+      addWallet(window.ethereum, 'Wallet', '💳');
     }
 
     return wallets;
