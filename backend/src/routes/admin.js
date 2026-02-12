@@ -541,7 +541,7 @@ router.get('/quests', async (req, res) => {
         requirement_value: q.requirement_value,
         requirement_metadata: q.requirement_metadata,
         reward_type: q.reward_type,
-        reward_amount: q.reward_amount,
+        reward_amount: q.reward_amount ? parseInt(q.reward_amount) : null,
         is_active: q.is_active,
         sort_order: q.sort_order,
         completions: parseInt(q.completion_count),
@@ -607,14 +607,18 @@ router.put('/quests/:id', async (req, res) => {
     if (is_active !== undefined) { paramCount++; updates.push(`is_active = $${paramCount}`); values.push(is_active); }
     if (sort_order !== undefined) { paramCount++; updates.push(`sort_order = $${paramCount}`); values.push(sort_order); }
 
-    if (external_url !== undefined) {
+    // Handle requirement_metadata updates (external_url + partner_api_config)
+    // Must be a single SET to avoid PostgreSQL overwriting the same column twice
+    if (external_url !== undefined && partner_api_config) {
+      partner_api_config.url = external_url;
+      paramCount++;
+      updates.push(`requirement_metadata = COALESCE(requirement_metadata, '{}') || $${paramCount}::jsonb`);
+      values.push(JSON.stringify(partner_api_config));
+    } else if (external_url !== undefined) {
       paramCount++;
       updates.push(`requirement_metadata = jsonb_set(COALESCE(requirement_metadata, '{}'), '{url}', $${paramCount}::jsonb)`);
       values.push(JSON.stringify(external_url));
-    }
-
-    if (partner_api_config) {
-      // Merge partner API config into requirement_metadata
+    } else if (partner_api_config) {
       paramCount++;
       updates.push(`requirement_metadata = COALESCE(requirement_metadata, '{}') || $${paramCount}::jsonb`);
       values.push(JSON.stringify(partner_api_config));
