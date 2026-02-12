@@ -102,7 +102,6 @@ const PyramidMemeEmpireV5 = () => {
   const [lastTapTime, setLastTapTime] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
   const [hasBattlePass, setHasBattlePass] = useState(false);
-  const [referrals, setReferrals] = useState(3);
   const [currentTab, setCurrentTab] = useState('game');
   const [particles, setParticles] = useState([]);
   const [floatingCoins, setFloatingCoins] = useState([]);
@@ -893,6 +892,9 @@ const PyramidMemeEmpireV5 = () => {
           q.quest_id === questId ? { ...q, isCompleted: true } : q
         ));
         setTotalQuestXP(result.totalQuestXP);
+
+        // Refresh game state (level, XP, bricks) after earning quest XP
+        await loadProgress();
 
         // Check if quest gave a bonus (KiiChain) or XP
         if (result.questBonus) {
@@ -2483,7 +2485,7 @@ const PyramidMemeEmpireV5 = () => {
                 <div className="stat-box">
                   <div className="stat-emoji">👥</div>
                   <div className="stat-label">REFERRALS</div>
-                  <div className="stat-value neon-cyan">{referrals}</div>
+                  <div className="stat-value neon-cyan">{referralStats.total}</div>
                 </div>
               </div>
 
