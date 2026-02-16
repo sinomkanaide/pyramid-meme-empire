@@ -139,6 +139,17 @@ const PyramidMemeEmpireV5 = () => {
   const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
   const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
 
+  // Share card system
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [selectedCardBg, setSelectedCardBg] = useState(0);
+  const [cardColor, setCardColor] = useState('#FF00FF');
+  const [cardShowLevel, setCardShowLevel] = useState(true);
+  const [cardShowTaps, setCardShowTaps] = useState(true);
+  const [cardShowRefs, setCardShowRefs] = useState(true);
+  const [cardOpacity, setCardOpacity] = useState(0.7);
+  const [sharePreviewUrl, setSharePreviewUrl] = useState(null);
+  const shareCanvasRef = useRef(null);
+
   // Arena/Leaderboard data
   const [leaderboard, setLeaderboard] = useState([
     { rank: 1, name: 'CryptoKing', taps: 8934, winnings: '23W' },
@@ -1463,6 +1474,204 @@ const PyramidMemeEmpireV5 = () => {
     navigator.clipboard.writeText(referralLink);
     showNotification('📋 COPIED!');
     playWhoosh();
+  };
+
+  // ========== SHARE CARD SYSTEM ==========
+  const drawShareCard = useCallback(() => {
+    const canvas = shareCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = 600, H = 800;
+    canvas.width = W;
+    canvas.height = H;
+
+    const draw = (bgImg) => {
+      // Background
+      if (bgImg) {
+        ctx.drawImage(bgImg, 0, 0, W, H);
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, W, H);
+        grad.addColorStop(0, '#0a0a1a');
+        grad.addColorStop(0.5, '#1a0a2e');
+        grad.addColorStop(1, '#0a1a2e');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Dark overlay
+      ctx.fillStyle = `rgba(0, 0, 0, ${cardOpacity})`;
+      ctx.fillRect(0, 0, W, H);
+
+      // Neon border
+      ctx.strokeStyle = cardColor;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = cardColor;
+      ctx.shadowBlur = 20;
+      ctx.strokeRect(12, 12, W - 24, H - 24);
+      ctx.shadowBlur = 0;
+
+      // Inner border
+      ctx.strokeStyle = `${cardColor}44`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(20, 20, W - 40, H - 40);
+
+      // Title: TAPKAMUN
+      ctx.textAlign = 'center';
+      ctx.shadowColor = cardColor;
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = cardColor;
+      ctx.font = 'bold 42px "Press Start 2P", monospace';
+      ctx.fillText('TAPKAMUN', W / 2, 80);
+      ctx.shadowBlur = 15;
+      ctx.fillText('TAPKAMUN', W / 2, 80);
+      ctx.shadowBlur = 0;
+
+      // Subtitle
+      ctx.fillStyle = '#ffffff88';
+      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.fillText('TAP TO EARN ON BASE', W / 2, 110);
+
+      // Divider line
+      ctx.strokeStyle = `${cardColor}66`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(60, 140);
+      ctx.lineTo(W - 60, 140);
+      ctx.stroke();
+
+      // Pyramid emoji
+      ctx.font = '80px serif';
+      ctx.fillText('🏺', W / 2, 240);
+
+      // Stats section
+      let statY = 310;
+      ctx.font = 'bold 16px "Press Start 2P", monospace';
+
+      if (cardShowLevel) {
+        ctx.fillStyle = '#FFD700';
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 10;
+        ctx.fillText(`LEVEL ${level}`, W / 2, statY);
+        ctx.shadowBlur = 0;
+        statY += 60;
+      }
+
+      if (cardShowTaps) {
+        ctx.fillStyle = '#00FFFF';
+        ctx.shadowColor = '#00FFFF';
+        ctx.shadowBlur = 10;
+        ctx.font = 'bold 14px "Press Start 2P", monospace';
+        ctx.fillText('BRICKS STACKED', W / 2, statY);
+        ctx.shadowBlur = 0;
+        statY += 35;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px "Press Start 2P", monospace';
+        const bricksDisplay = bricks >= 1000000 ? `${(bricks / 1000000).toFixed(1)}M` : bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : String(bricks);
+        ctx.fillText(bricksDisplay, W / 2, statY);
+        statY += 60;
+      }
+
+      if (cardShowRefs) {
+        ctx.fillStyle = '#00FF00';
+        ctx.shadowColor = '#00FF00';
+        ctx.shadowBlur = 10;
+        ctx.font = 'bold 14px "Press Start 2P", monospace';
+        ctx.fillText('REFERRALS', W / 2, statY);
+        ctx.shadowBlur = 0;
+        statY += 35;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px "Press Start 2P", monospace';
+        ctx.fillText(String(referralStats.total), W / 2, statY);
+        statY += 50;
+      }
+
+      // Divider
+      ctx.strokeStyle = `${cardColor}66`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(60, H - 160);
+      ctx.lineTo(W - 60, H - 160);
+      ctx.stroke();
+
+      // Invite code
+      ctx.fillStyle = '#ffffff88';
+      ctx.font = '11px "Press Start 2P", monospace';
+      ctx.fillText('INVITE CODE', W / 2, H - 130);
+
+      ctx.fillStyle = cardColor;
+      ctx.shadowColor = cardColor;
+      ctx.shadowBlur = 15;
+      ctx.font = 'bold 22px "Press Start 2P", monospace';
+      ctx.fillText(referralCode || '------', W / 2, H - 100);
+      ctx.shadowBlur = 0;
+
+      // URL
+      ctx.fillStyle = '#ffffff66';
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText('tapkamun.fun', W / 2, H - 60);
+
+      // Footer accent
+      ctx.fillStyle = cardColor;
+      ctx.fillRect(60, H - 30, W - 120, 3);
+
+      // Update preview
+      setSharePreviewUrl(canvas.toDataURL('image/png'));
+    };
+
+    // Try loading background image
+    const bgIndex = selectedCardBg + 1;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => draw(img);
+    img.onerror = () => draw(null);
+    img.src = `/images/share-cards/card-${bgIndex}.jpg`;
+  }, [selectedCardBg, cardColor, cardOpacity, cardShowLevel, cardShowTaps, cardShowRefs, level, bricks, referralStats.total, referralCode]);
+
+  // Redraw when share card settings change
+  useEffect(() => {
+    if (showShareCard) drawShareCard();
+  }, [showShareCard, drawShareCard]);
+
+  const generateShareImage = async () => {
+    drawShareCard();
+    const canvas = shareCanvasRef.current;
+    if (!canvas) return null;
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  };
+
+  const downloadShareCard = async () => {
+    const blob = await generateShareImage();
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tapkamun-${referralCode || 'card'}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification('📥 CARD SAVED!');
+  };
+
+  const shareCardOnTwitter = async () => {
+    await downloadShareCard();
+    const tweetText = encodeURIComponent(
+      `I'm Level ${level} on @tapkamunfun 🏺⚡\n\n${bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : bricks} taps and counting!\n\nJoin with my code: ${referralCode}\n👉 https://tapkamun.fun?ref=${referralCode}\n\n#TAPKAMUN #KAMUN #Base #TapToEarn`
+    );
+    window.open(`https://x.com/intent/tweet?text=${tweetText}`, '_blank');
+  };
+
+  const shareCardOnTelegram = async () => {
+    await downloadShareCard();
+    const text = encodeURIComponent(`I'm Level ${level} on TAPKAMUN 🏺⚡ Join with my code: ${referralCode}`);
+    const url = encodeURIComponent(`https://tapkamun.fun?ref=${referralCode}`);
+    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+  };
+
+  const copyShareLink = () => {
+    const link = `https://tapkamun.fun?ref=${referralCode}`;
+    navigator.clipboard.writeText(link);
+    showNotification('🔗 LINK COPIED!');
   };
 
   // ========== TOOLTIP HANDLERS ==========
@@ -3093,9 +3302,9 @@ const PyramidMemeEmpireV5 = () => {
                       <Copy size={16} />
                       COPY
                     </button>
-                    <button onClick={shareOnTwitter} disabled={!referralLink} className="action-btn action-btn-x">
+                    <button onClick={() => setShowShareCard(true)} disabled={!referralLink} className="action-btn action-btn-share">
                       <Share2 size={14} />
-                      SHARE X
+                      SHARE STATS
                     </button>
                     <button onClick={shareOnTelegram} disabled={!referralLink} className="action-btn action-btn-tg">
                       SHARE TG
@@ -3179,6 +3388,102 @@ const PyramidMemeEmpireV5 = () => {
           </button>
         </nav>
       </div>
+
+      {/* Share Card Modal */}
+      {showShareCard && (
+        <div className="share-card-overlay" onMouseDown={() => setShowShareCard(false)}>
+          <div className="share-card-modal" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+            <button className="share-card-close" onClick={() => setShowShareCard(false)}>✕</button>
+            <h3 className="share-card-title">SHARE YOUR STATS</h3>
+
+            {/* Hidden canvas for rendering */}
+            <canvas ref={shareCanvasRef} style={{ display: 'none' }} />
+
+            {/* Card preview */}
+            <div className="card-preview">
+              {sharePreviewUrl ? (
+                <img src={sharePreviewUrl} alt="Share card preview" style={{ width: '100%', borderRadius: 8 }} />
+              ) : (
+                <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: 10, fontFamily: 'inherit' }}>
+                  Loading preview...
+                </div>
+              )}
+            </div>
+
+            {/* Background thumbnails */}
+            <div className="card-thumbnails">
+              {[0, 1, 2].map((i) => (
+                <button
+                  key={i}
+                  className={`card-thumb ${selectedCardBg === i ? 'card-thumb-active' : ''}`}
+                  onClick={() => setSelectedCardBg(i)}
+                  style={{ borderColor: selectedCardBg === i ? cardColor : 'rgba(255,255,255,0.2)' }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+
+            {/* Color swatches */}
+            <div className="color-swatches">
+              {['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFD700'].map((c) => (
+                <button
+                  key={c}
+                  className={`color-swatch ${cardColor === c ? 'color-swatch-active' : ''}`}
+                  style={{ background: c, boxShadow: cardColor === c ? `0 0 12px ${c}` : 'none' }}
+                  onClick={() => setCardColor(c)}
+                />
+              ))}
+            </div>
+
+            {/* Toggles */}
+            <div className="card-toggles">
+              <label className="card-toggle-label">
+                <input type="checkbox" checked={cardShowLevel} onChange={(e) => setCardShowLevel(e.target.checked)} />
+                <span>Level</span>
+              </label>
+              <label className="card-toggle-label">
+                <input type="checkbox" checked={cardShowTaps} onChange={(e) => setCardShowTaps(e.target.checked)} />
+                <span>Taps</span>
+              </label>
+              <label className="card-toggle-label">
+                <input type="checkbox" checked={cardShowRefs} onChange={(e) => setCardShowRefs(e.target.checked)} />
+                <span>Refs</span>
+              </label>
+            </div>
+
+            {/* Opacity slider */}
+            <div className="card-slider">
+              <span style={{ color: '#888', fontSize: 8, fontFamily: 'inherit' }}>OVERLAY</span>
+              <input
+                type="range"
+                min="0.3"
+                max="1.0"
+                step="0.05"
+                value={cardOpacity}
+                onChange={(e) => setCardOpacity(parseFloat(e.target.value))}
+                style={{ flex: 1, accentColor: cardColor }}
+              />
+            </div>
+
+            {/* Share actions */}
+            <div className="share-actions">
+              <button className="share-action-btn share-btn-x" onClick={shareCardOnTwitter}>
+                SHARE X
+              </button>
+              <button className="share-action-btn share-btn-tg" onClick={shareCardOnTelegram}>
+                SHARE TG
+              </button>
+              <button className="share-action-btn share-btn-dl" onClick={downloadShareCard}>
+                DOWNLOAD
+              </button>
+              <button className="share-action-btn share-btn-copy" onClick={copyShareLink}>
+                COPY LINK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSS - Continuing in next message due to length */}
       <style jsx>{`
@@ -4764,6 +5069,209 @@ const PyramidMemeEmpireV5 = () => {
         .action-btn-tg {
           background: linear-gradient(135deg, #0088cc, #229ED9);
           color: white;
+        }
+
+        .action-btn-share {
+          background: linear-gradient(135deg, #FF00FF, #00FFFF);
+          color: black;
+          font-weight: bold;
+          text-shadow: none;
+        }
+
+        /* ========== SHARE CARD MODAL ========== */
+        .share-card-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.95);
+          z-index: 10001;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+        }
+
+        .share-card-modal {
+          background: linear-gradient(135deg, #1a1a2e, #2d1f3d);
+          border: 2px solid #FF00FF;
+          border-radius: 16px;
+          padding: 20px;
+          max-width: 380px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          position: relative;
+          box-shadow: 0 0 40px rgba(255, 0, 255, 0.3);
+        }
+
+        .share-card-close {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          width: 30px;
+          height: 30px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          font-size: 14px;
+        }
+
+        .share-card-title {
+          color: #FF00FF;
+          font-size: 13px;
+          font-family: inherit;
+          text-align: center;
+          margin-bottom: 14px;
+          text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+        }
+
+        .card-preview {
+          background: #000;
+          border-radius: 8px;
+          overflow: hidden;
+          margin-bottom: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-thumbnails {
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .card-thumb {
+          width: 48px;
+          height: 48px;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          background: linear-gradient(135deg, #1a1a2e, #0a0a1a);
+          color: #fff;
+          font-family: inherit;
+          font-size: 14px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+
+        .card-thumb:hover {
+          transform: scale(1.05);
+        }
+
+        .card-thumb-active {
+          box-shadow: 0 0 12px currentColor;
+          transform: scale(1.05);
+        }
+
+        .color-swatches {
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .color-swatch {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .color-swatch:hover {
+          transform: scale(1.15);
+        }
+
+        .color-swatch-active {
+          border-color: #fff;
+          transform: scale(1.15);
+        }
+
+        .card-toggles {
+          display: flex;
+          justify-content: center;
+          gap: 16px;
+          margin-bottom: 10px;
+        }
+
+        .card-toggle-label {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          color: #aaa;
+          font-family: inherit;
+          font-size: 8px;
+          cursor: pointer;
+        }
+
+        .card-toggle-label input[type="checkbox"] {
+          accent-color: #FF00FF;
+          width: 14px;
+          height: 14px;
+        }
+
+        .card-slider {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 14px;
+          padding: 0 8px;
+        }
+
+        .card-slider input[type="range"] {
+          height: 4px;
+        }
+
+        .share-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+
+        .share-action-btn {
+          padding: 10px 8px;
+          border: none;
+          border-radius: 8px;
+          font-family: inherit;
+          font-size: 8px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .share-action-btn:hover {
+          transform: scale(1.03);
+          filter: brightness(1.2);
+        }
+
+        .share-btn-x {
+          background: linear-gradient(135deg, #1DA1F2, #0077B5);
+          color: white;
+        }
+
+        .share-btn-tg {
+          background: linear-gradient(135deg, #0088cc, #229ED9);
+          color: white;
+        }
+
+        .share-btn-dl {
+          background: linear-gradient(135deg, #00FF00, #00CC00);
+          color: black;
+        }
+
+        .share-btn-copy {
+          background: linear-gradient(135deg, #FFFF00, #FF00FF);
+          color: black;
         }
 
         .referral-stats {

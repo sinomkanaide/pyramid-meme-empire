@@ -535,14 +535,15 @@ ON CONFLICT (slug) DO UPDATE SET
 
 INSERT INTO quests (title, description, icon, quest_type, requirement_type, requirement_value, requirement_metadata, reward_type, is_reward_hidden, sort_order)
 VALUES
-    ('Follow on X', 'Follow @PyramidMeme on X', '🐦', 'social', 'twitter_follow', 1, '{"handle": "@PyramidMeme", "url": "https://x.com/pyramidmeme"}', 'pme', TRUE, 1),
-    ('Like Latest Post', 'Like our pinned post on X', '❤️', 'social', 'twitter_like', 1, '{"url": "https://x.com/pyramidmeme"}', 'pme', TRUE, 2),
-    ('Retweet', 'RT our announcement', '🔄', 'social', 'twitter_retweet', 1, '{"url": "https://x.com/pyramidmeme"}', 'pme', TRUE, 3),
-    ('Join Telegram', 'Join our community on Telegram', '💬', 'social', 'telegram_join', 1, '{"url": "https://t.me/pyramidmeme"}', 'pme', TRUE, 4),
-    ('Stack 100 Bricks', 'Tap 100 times to earn bricks', '🧱', 'game', 'tap_count', 100, '{}', 'pme', TRUE, 5),
-    ('Stack 1000 Bricks', 'Tap 1000 times - Brick Master!', '🏆', 'achievement', 'tap_count', 1000, '{}', 'pme', TRUE, 6),
-    ('Invite a Friend', 'Get someone to join using your referral link', '👥', 'social', 'referral', 1, '{}', 'pme', TRUE, 7),
-    ('First Purchase', 'Make your first purchase in the shop', '💎', 'game', 'purchase', 1, '{}', 'pme', TRUE, 8)
+    ('Follow on X', 'Follow @tapkamunfun on X', '🐦', 'social', 'twitter_follow', 1, '{"handle": "@tapkamunfun", "url": "https://x.com/tapkamunfun"}', 'pme', TRUE, 1),
+    ('Like Latest Post', 'Like our pinned post on X', '❤️', 'social', 'twitter_like', 1, '{"url": "https://x.com/tapkamunfun"}', 'pme', TRUE, 2),
+    ('Retweet', 'RT our announcement', '🔄', 'social', 'twitter_retweet', 1, '{"url": "https://x.com/tapkamunfun"}', 'pme', TRUE, 3),
+    ('Join Telegram', 'Join our community on Telegram', '💬', 'social', 'telegram_join', 1, '{"url": "https://t.me/tapkamun"}', 'pme', TRUE, 4),
+    ('Join Discord', 'Join our Discord server', '🎮', 'social', 'discord_join', 1, '{"url": "https://discord.gg/Ygn5DXtAze"}', 'pme', TRUE, 5),
+    ('Stack 100 Bricks', 'Tap 100 times to earn bricks', '🧱', 'game', 'tap_count', 100, '{}', 'pme', TRUE, 6),
+    ('Stack 1000 Bricks', 'Tap 1000 times - Brick Master!', '🏆', 'achievement', 'tap_count', 1000, '{}', 'pme', TRUE, 7),
+    ('Invite a Friend', 'Get someone to join using your referral link', '👥', 'social', 'referral', 1, '{}', 'pme', TRUE, 8),
+    ('First Purchase', 'Make your first purchase in the shop', '💎', 'game', 'purchase', 1, '{}', 'pme', TRUE, 9)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
