@@ -19,21 +19,35 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
+const allowedOrigins = [
+  'https://tapkamun.fun',
+  'https://www.tapkamun.fun',
+  'https://api.tapkamun.fun',
+  'https://pyramid-meme-empire.vercel.app',
+  'https://pyramid-meme-empire-git-main-sinomkanaides-projects.vercel.app',
+  'https://pyramid-meme-empire-jxrk.vercel.app',
+  // Galxe domains
+  'https://galxe.com',
+  'https://app.galxe.com',
+  'https://dashboard.galxe.com',
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_PANEL_URL,
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174'
+].filter(Boolean);
+
 app.use(cors({
-  origin: [
-    'https://tapkamun.fun',
-    'https://www.tapkamun.fun',
-    'https://api.tapkamun.fun',
-    'https://pyramid-meme-empire.vercel.app',
-    'https://pyramid-meme-empire-git-main-sinomkanaides-projects.vercel.app',
-    'https://pyramid-meme-empire-jxrk.vercel.app',
-    process.env.FRONTEND_URL,
-    process.env.ADMIN_PANEL_URL,
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:5174'
-  ].filter(Boolean),
-  credentials: true
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
