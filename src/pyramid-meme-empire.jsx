@@ -538,8 +538,18 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   // ========== TAP MECHANICS ==========
+  const lastTapTs = useRef(0);
+  const TAP_THROTTLE = 50; // 50ms minimum between taps
+
   const handleTap = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const now = Date.now();
+
+    // Throttle rapid taps (mobile spam prevention)
+    if (now - lastTapTs.current < TAP_THROTTLE) return;
+    lastTapTs.current = now;
 
     // CRITICAL: Prevent concurrent requests - only one tap at a time
     if (tapInFlight.current) {
@@ -661,6 +671,9 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   // ========== PARTICLES ==========
+  const MAX_PARTICLES = 20;
+  const particleCounter = useRef(0);
+
   const createParticles = (x, y, forLevelUp = false) => {
     const rect = document.getElementById('tap-area')?.getBoundingClientRect();
     if (!rect) return;
@@ -671,17 +684,15 @@ const PyramidMemeEmpireV5 = () => {
     const confettiShapes = ['▪', '▫', '●', '◆', '★'];
     const cryptoEmojis = ['💎', '🚀', '⚡', '💰', '🔥'];
 
-    // Premium users get more particles, free users get 1 emoji
-    // Level up always gets full celebration
     const showFullParticles = isPremium || hasBattlePass || forLevelUp;
+    const batch = ++particleCounter.current;
 
     let newParticles = [];
 
     if (showFullParticles) {
-      // Premium: 3 confetti + 3 emojis
       newParticles = [
         ...Array.from({ length: 3 }, (_, i) => ({
-          id: `c-${Date.now()}-${i}`,
+          id: `c-${batch}-${i}`,
           type: 'confetti',
           x: relX,
           y: relY,
@@ -693,7 +704,7 @@ const PyramidMemeEmpireV5 = () => {
           color: ['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00', '#FFD700'][Math.floor(Math.random() * 5)],
         })),
         ...Array.from({ length: 3 }, (_, i) => ({
-          id: `e-${Date.now()}-${i}`,
+          id: `e-${batch}-${i}`,
           type: 'emoji',
           x: relX + (Math.random() - 0.5) * 10,
           y: relY,
@@ -706,9 +717,8 @@ const PyramidMemeEmpireV5 = () => {
         })),
       ];
     } else {
-      // Free users: 1 simple emoji only
       newParticles = [{
-        id: `e-${Date.now()}-0`,
+        id: `e-${batch}-0`,
         type: 'emoji',
         x: relX,
         y: relY,
@@ -721,12 +731,18 @@ const PyramidMemeEmpireV5 = () => {
       }];
     }
 
-    setParticles(prev => [...prev, ...newParticles]);
+    const ids = new Set(newParticles.map(p => p.id));
+
+    setParticles(prev => {
+      // Cap total particles (drop oldest if over limit, unless level up)
+      if (prev.length >= MAX_PARTICLES && !forLevelUp) return prev;
+      return [...prev, ...newParticles];
+    });
+
+    // Clean up after 1.5s (was 3.5s)
     setTimeout(() => {
-      setParticles(prev =>
-        prev.filter(p => !newParticles.find(np => np.id === p.id))
-      );
-    }, 3500);
+      setParticles(prev => prev.filter(p => !ids.has(p.id)));
+    }, 1500);
   };
 
   useEffect(() => {
@@ -2549,6 +2565,7 @@ const PyramidMemeEmpireV5 = () => {
                 id="tap-area"
                 className="tap-area-full"
                 onClick={handleTap}
+                onTouchEnd={(e) => { e.preventDefault(); handleTap(e.changedTouches?.[0] || e); }}
               >
                 <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
                   <div className="pyramid-grid">
@@ -3229,7 +3246,8 @@ const PyramidMemeEmpireV5 = () => {
           font-size: 28px;
           font-weight: bold;
           opacity: 1;
-          animation: particle-fade 3.5s ease-out forwards;
+          animation: particle-fade 1.5s ease-out forwards;
+          will-change: transform, opacity;
         }
 
         .particle-confetti {
@@ -3244,7 +3262,7 @@ const PyramidMemeEmpireV5 = () => {
 
         @keyframes particle-fade {
           0% { opacity: 1; }
-          70% { opacity: 1; }
+          60% { opacity: 1; }
           100% { opacity: 0; }
         }
 
@@ -3656,6 +3674,10 @@ const PyramidMemeEmpireV5 = () => {
 
         .pyramid-container {
           transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+          touch-action: manipulation;
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
         }
 
         .pyramid-pulse {
