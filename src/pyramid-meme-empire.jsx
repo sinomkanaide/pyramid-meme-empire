@@ -1624,7 +1624,7 @@ const PyramidMemeEmpireV5 = () => {
     img.crossOrigin = 'anonymous';
     img.onload = () => draw(img);
     img.onerror = () => draw(null);
-    img.src = `/images/share-cards/card-${bgIndex}.jpg`;
+    img.src = `/images/share-cards/card-${bgIndex}.webp`;
   }, [selectedCardBg, cardColor, cardOpacity, cardShowLevel, cardShowTaps, cardShowRefs, level, bricks, referralStats.total, referralCode]);
 
   // Redraw when share card settings change
