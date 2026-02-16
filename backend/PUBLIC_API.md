@@ -78,7 +78,7 @@ GET /api/public/check/paid/{wallet_address}
 ```
 
 **Galxe Configuration:**
-- Endpoint: `https://api.tapkamun.fun/api/public/check/paid/{address}`
+- Endpoint: `https://api.tapkamun.fun/api/public/check/paid/$address`
 - Success Expression: `data.hasPaid === true`
 
 **cURL:**
@@ -106,7 +106,7 @@ GET /api/public/check/level/{wallet_address}?min=10
 ```
 
 **Galxe Configuration (Level 10+ quest):**
-- Endpoint: `https://api.tapkamun.fun/api/public/check/level/{address}?min=10`
+- Endpoint: `https://api.tapkamun.fun/api/public/check/level/$address?min=10`
 - Success Expression: `data.meetsRequirement === true`
 
 **cURL:**
@@ -135,7 +135,7 @@ GET /api/public/check/taps/{wallet_address}?min=1000
 ```
 
 **Galxe Configuration (1000+ taps quest):**
-- Endpoint: `https://api.tapkamun.fun/api/public/check/taps/{address}?min=1000`
+- Endpoint: `https://api.tapkamun.fun/api/public/check/taps/$address?min=1000`
 - Success Expression: `data.meetsRequirement === true`
 
 **cURL:**
@@ -234,22 +234,24 @@ If the wallet has never used TAPKAMUN:
 
 ## Galxe Integration Guide
 
+> **⚠️ IMPORTANTE: Galxe usa `$address` como placeholder, NO `{address}`**
+
 1. Create a new quest on Galxe
 2. Select "API Verification" as credential type
 3. Configure:
-   - **API URL:** `https://api.tapkamun.fun/api/public/check/paid/{address}`
+   - **API URL:** `https://api.tapkamun.fun/api/public/check/paid/$address`
    - **Method:** GET
    - **Success Expression:** `data.hasPaid === true`
-4. The `{address}` placeholder will be replaced by Galxe with the user's wallet
+4. The `$address` placeholder will be replaced by Galxe with the user's wallet
 
 ### Example Quest Configurations
 
 | Quest | Endpoint | Expression |
 |-------|----------|------------|
-| Buy Premium or BP | `/check/paid/{address}` | `data.hasPaid === true` |
-| Reach Level 10 | `/check/level/{address}?min=10` | `data.meetsRequirement === true` |
-| Do 1000 Taps | `/check/taps/{address}?min=1000` | `data.meetsRequirement === true` |
-| Complete Quest #1 | `/check/quest/1/{address}` | `data.questCompleted === true` |
+| Buy Premium or BP | `/check/paid/$address` | `data.hasPaid === true` |
+| Reach Level 10 | `/check/level/$address?min=10` | `data.meetsRequirement === true` |
+| Do 1000 Taps | `/check/taps/$address?min=1000` | `data.meetsRequirement === true` |
+| Complete Quest #1 | `/check/quest/1/$address` | `data.questCompleted === true` |
 
 ---
 
