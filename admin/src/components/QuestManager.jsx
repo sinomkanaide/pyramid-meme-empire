@@ -161,14 +161,19 @@ function QuestEditModal({ quest, onSave, onClose }) {
   const [xpReward, setXpReward] = useState(quest.reward_amount || '')
   const [externalUrl, setExternalUrl] = useState(quest.requirement_metadata?.url || '')
   const [sortOrder, setSortOrder] = useState(quest.sort_order || 0)
+  const [requirementValue, setRequirementValue] = useState(quest.requirement_value ?? 1)
   const [apiEndpoint, setApiEndpoint] = useState(quest.requirement_metadata?.api_endpoint || '')
   const [apiMethod, setApiMethod] = useState(quest.requirement_metadata?.api_method || 'GET')
   const [successExpr, setSuccessExpr] = useState(quest.requirement_metadata?.success_expression || 'data.exists === true')
+  const [rewardType, setRewardType] = useState(quest.requirement_metadata?.reward_type === 'boost' ? 'boost' : 'xp')
   const [boostPct, setBoostPct] = useState(quest.requirement_metadata?.boost_percentage || 20)
   const [boostDays, setBoostDays] = useState(quest.requirement_metadata?.boost_days || 30)
   const [saving, setSaving] = useState(false)
 
   const isPartner = quest.requirement_type === 'partner_quest'
+  const isGame = GAME_TYPES.includes(quest.requirement_type)
+  const isReferral = REFERRAL_TYPES.includes(quest.requirement_type)
+  const showRequirementValue = isGame || isReferral
   const vl = getVerificationLabel(quest.requirement_type)
 
   const handleSave = async () => {
@@ -179,15 +184,21 @@ function QuestEditModal({ quest, onSave, onClose }) {
       external_url: externalUrl || null,
       sort_order: Number(sortOrder)
     }
+    if (showRequirementValue) {
+      payload.requirement_value = Number(requirementValue)
+    }
     if (isPartner && apiEndpoint) {
-      payload.partner_api_config = {
+      const partnerConfig = {
         api_endpoint: apiEndpoint,
         api_method: apiMethod,
-        success_expression: successExpr,
-        boost_percentage: Number(boostPct),
-        boost_days: Number(boostDays),
-        reward_type: 'boost'
+        success_expression: successExpr
       }
+      if (rewardType === 'boost') {
+        partnerConfig.reward_type = 'boost'
+        partnerConfig.boost_percentage = Number(boostPct)
+        partnerConfig.boost_days = Number(boostDays)
+      }
+      payload.partner_api_config = partnerConfig
     }
     await onSave(payload)
     setSaving(false)
@@ -220,6 +231,12 @@ function QuestEditModal({ quest, onSave, onClose }) {
             <label className="form-label">Sort Order</label>
             <input className="login-input" type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} style={{ width: 80 }} />
           </div>
+          {showRequirementValue && (
+            <div>
+              <label className="form-label">Target Value</label>
+              <input className="login-input" type="number" value={requirementValue} onChange={e => setRequirementValue(e.target.value)} style={{ width: 100 }} />
+            </div>
+          )}
         </div>
 
         <label className="form-label">External URL (GO button link)</label>
@@ -243,16 +260,25 @@ function QuestEditModal({ quest, onSave, onClose }) {
                 <input className="login-input" value={successExpr} onChange={e => setSuccessExpr(e.target.value)} placeholder="data.exists === true" />
               </div>
             </div>
-            <div className="form-row">
-              <div>
-                <label className="form-label">Boost %</label>
-                <input className="login-input" type="number" value={boostPct} onChange={e => setBoostPct(e.target.value)} style={{ width: 80 }} />
+
+            <label className="form-label">Reward Type</label>
+            <select className="login-input" value={rewardType} onChange={e => setRewardType(e.target.value)}>
+              <option value="xp">XP Amount</option>
+              <option value="boost">Tap Boost (% + days)</option>
+            </select>
+
+            {rewardType === 'boost' && (
+              <div className="form-row">
+                <div>
+                  <label className="form-label">Boost %</label>
+                  <input className="login-input" type="number" value={boostPct} onChange={e => setBoostPct(e.target.value)} style={{ width: 80 }} />
+                </div>
+                <div>
+                  <label className="form-label">Boost Days</label>
+                  <input className="login-input" type="number" value={boostDays} onChange={e => setBoostDays(e.target.value)} style={{ width: 80 }} />
+                </div>
               </div>
-              <div>
-                <label className="form-label">Boost Days</label>
-                <input className="login-input" type="number" value={boostDays} onChange={e => setBoostDays(e.target.value)} style={{ width: 80 }} />
-              </div>
-            </div>
+            )}
           </>
         )}
 

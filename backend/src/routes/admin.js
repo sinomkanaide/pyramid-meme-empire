@@ -593,7 +593,7 @@ router.post('/quests', async (req, res) => {
 router.put('/quests/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, icon, xp_reward, is_active, external_url, sort_order, partner_api_config } = req.body;
+    const { title, description, icon, xp_reward, is_active, external_url, sort_order, partner_api_config, requirement_value } = req.body;
 
     // Build dynamic update
     const updates = [];
@@ -603,9 +603,10 @@ router.put('/quests/:id', async (req, res) => {
     if (title !== undefined) { paramCount++; updates.push(`title = $${paramCount}`); values.push(title); }
     if (description !== undefined) { paramCount++; updates.push(`description = $${paramCount}`); values.push(description); }
     if (icon !== undefined) { paramCount++; updates.push(`icon = $${paramCount}`); values.push(icon); }
-    if (xp_reward !== undefined) { paramCount++; updates.push(`reward_amount = $${paramCount}`); values.push(parseInt(xp_reward) || 0); }
+    if (xp_reward !== undefined) { paramCount++; updates.push(`reward_amount = $${paramCount}`); values.push(xp_reward !== null ? parseInt(xp_reward) : null); }
     if (is_active !== undefined) { paramCount++; updates.push(`is_active = $${paramCount}`); values.push(is_active); }
-    if (sort_order !== undefined) { paramCount++; updates.push(`sort_order = $${paramCount}`); values.push(sort_order); }
+    if (sort_order !== undefined) { paramCount++; updates.push(`sort_order = $${paramCount}`); values.push(parseInt(sort_order)); }
+    if (requirement_value !== undefined) { paramCount++; updates.push(`requirement_value = $${paramCount}`); values.push(parseInt(requirement_value)); }
 
     // Handle requirement_metadata updates (external_url + partner_api_config)
     // Must be a single SET to avoid PostgreSQL overwriting the same column twice

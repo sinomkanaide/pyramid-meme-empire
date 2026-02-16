@@ -51,7 +51,7 @@ class Quest {
     // Get XP reward (parseInt to handle NUMERIC column returning "35.0000000")
     const xpReward = dbQuest.requirement_type === 'partner_quest'
       ? 0
-      : (parseInt(dbQuest.reward_amount) || XP_REWARDS[dbQuest.requirement_type] || 50);
+      : (dbQuest.reward_amount != null ? parseInt(dbQuest.reward_amount) : (XP_REWARDS[dbQuest.requirement_type] ?? 50));
 
     // Determine verification method
     let verificationMethod = 'manual'; // default: social quests (GO + VERIFY)
@@ -95,7 +95,7 @@ class Quest {
       // Keep original fields too
       quest_type: dbQuest.quest_type,
       requirement_type: dbQuest.requirement_type,
-      requirement_value: parseInt(dbQuest.requirement_value) || 1,
+      requirement_value: dbQuest.requirement_value != null ? parseInt(dbQuest.requirement_value) : 1,
       requirement_metadata: dbQuest.requirement_metadata
     };
   }
