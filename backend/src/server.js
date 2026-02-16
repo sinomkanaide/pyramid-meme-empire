@@ -213,7 +213,11 @@ const runMigrations = async () => {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(100)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100)',
     // Fix referral quest: require 3 verified referrals, reward 450 XP
-    `UPDATE quests SET requirement_value = 3, reward_amount = 450 WHERE requirement_type = 'referral_milestone'`,
+    `UPDATE quests SET requirement_value = 3, reward_amount = 450 WHERE requirement_type IN ('referral_milestone', 'referral')`,
+    // Fix Stack 100 Bricks: 200 XP
+    `UPDATE quests SET reward_amount = 200 WHERE requirement_type = 'tap_count' AND requirement_value = 100`,
+    // Fix Stack 1000 Bricks: 1000 XP
+    `UPDATE quests SET reward_amount = 1000 WHERE requirement_type = 'tap_count' AND requirement_value = 1000`,
   ];
 
   for (const sql of migrations) {

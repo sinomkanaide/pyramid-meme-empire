@@ -10,7 +10,9 @@ const XP_REWARDS = {
   'telegram_join': 50,
   'level_milestone': 100,
   'tap_milestone': 75,
-  'referral_milestone': 150,
+  'tap_count': 200,
+  'referral_milestone': 450,
+  'referral': 450,
   'partner_quest': 0
 };
 
@@ -93,7 +95,7 @@ class Quest {
       // Keep original fields too
       quest_type: dbQuest.quest_type,
       requirement_type: dbQuest.requirement_type,
-      requirement_value: dbQuest.requirement_value,
+      requirement_value: parseInt(dbQuest.requirement_value) || 1,
       requirement_metadata: dbQuest.requirement_metadata
     };
   }

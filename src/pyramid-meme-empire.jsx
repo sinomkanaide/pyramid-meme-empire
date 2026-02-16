@@ -3158,7 +3158,7 @@ const PyramidMemeEmpireV5 = () => {
           </button>
           <button 
             className={`nav-btn ${currentTab === 'quests' ? 'nav-btn-active' : ''}`}
-            onClick={() => { setCurrentTab('quests'); playWhoosh(); }}
+            onClick={() => { setCurrentTab('quests'); playWhoosh(); if (isAuthenticated) loadQuests(); }}
           >
             <Zap size={22} />
             <span>QUESTS</span>
