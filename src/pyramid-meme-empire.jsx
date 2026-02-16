@@ -148,6 +148,7 @@ const PyramidMemeEmpireV5 = () => {
   const [cardShowRefs, setCardShowRefs] = useState(true);
   const [cardOpacity, setCardOpacity] = useState(0.7);
   const [sharePreviewUrl, setSharePreviewUrl] = useState(null);
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const shareCanvasRef = useRef(null);
 
   // Arena/Leaderboard data
@@ -1477,201 +1478,232 @@ const PyramidMemeEmpireV5 = () => {
   };
 
   // ========== SHARE CARD SYSTEM ==========
-  const drawShareCard = useCallback(() => {
+  const loadImage = (src) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load ${src}`));
+      img.src = src;
+    });
+  };
+
+  const generateShareCard = useCallback(async () => {
     const canvas = shareCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
     const ctx = canvas.getContext('2d');
     const W = 600, H = 800;
     canvas.width = W;
     canvas.height = H;
 
-    const draw = (bgImg) => {
-      // Background
-      if (bgImg) {
-        ctx.drawImage(bgImg, 0, 0, W, H);
-      } else {
-        const grad = ctx.createLinearGradient(0, 0, W, H);
-        grad.addColorStop(0, '#0a0a1a');
-        grad.addColorStop(0.5, '#1a0a2e');
-        grad.addColorStop(1, '#0a1a2e');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, W, H);
-      }
+    // 1. Load background image (await it!)
+    let bgImg = null;
+    try {
+      const bgIndex = selectedCardBg + 1;
+      bgImg = await loadImage(`/images/share-cards/card-${bgIndex}.webp`);
+    } catch (e) {
+      // Fallback to gradient
+    }
 
-      // Dark overlay
-      ctx.fillStyle = `rgba(0, 0, 0, ${cardOpacity})`;
+    // 2. Draw background
+    if (bgImg) {
+      ctx.drawImage(bgImg, 0, 0, W, H);
+    } else {
+      const grad = ctx.createLinearGradient(0, 0, W, H);
+      grad.addColorStop(0, '#0a0a1a');
+      grad.addColorStop(0.5, '#1a0a2e');
+      grad.addColorStop(1, '#0a1a2e');
+      ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
+    }
 
-      // Neon border
-      ctx.strokeStyle = cardColor;
-      ctx.lineWidth = 4;
-      ctx.shadowColor = cardColor;
-      ctx.shadowBlur = 20;
-      ctx.strokeRect(12, 12, W - 24, H - 24);
+    // 3. Dark overlay
+    ctx.fillStyle = `rgba(0, 0, 0, ${cardOpacity})`;
+    ctx.fillRect(0, 0, W, H);
+
+    // 4. Neon border
+    ctx.strokeStyle = cardColor;
+    ctx.lineWidth = 4;
+    ctx.shadowColor = cardColor;
+    ctx.shadowBlur = 20;
+    ctx.strokeRect(12, 12, W - 24, H - 24);
+    ctx.shadowBlur = 0;
+
+    // Inner border
+    ctx.strokeStyle = `${cardColor}44`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, 20, W - 40, H - 40);
+
+    // 5. Title: TAPKAMUN
+    ctx.textAlign = 'center';
+    ctx.shadowColor = cardColor;
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = cardColor;
+    ctx.font = 'bold 42px "Press Start 2P", monospace';
+    ctx.fillText('TAPKAMUN', W / 2, 80);
+    ctx.shadowBlur = 15;
+    ctx.fillText('TAPKAMUN', W / 2, 80);
+    ctx.shadowBlur = 0;
+
+    // Subtitle
+    ctx.fillStyle = '#ffffff88';
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText('TAP TO EARN ON BASE', W / 2, 110);
+
+    // Divider line
+    ctx.strokeStyle = `${cardColor}66`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(60, 140);
+    ctx.lineTo(W - 60, 140);
+    ctx.stroke();
+
+    // Pyramid emoji
+    ctx.font = '80px serif';
+    ctx.fillText('\u{1F3FA}', W / 2, 240);
+
+    // 6. Stats section
+    let statY = 310;
+    ctx.font = 'bold 16px "Press Start 2P", monospace';
+
+    if (cardShowLevel) {
+      ctx.fillStyle = '#FFD700';
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 10;
+      ctx.fillText(`LEVEL ${level}`, W / 2, statY);
       ctx.shadowBlur = 0;
+      statY += 60;
+    }
 
-      // Inner border
-      ctx.strokeStyle = `${cardColor}44`;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(20, 20, W - 40, H - 40);
-
-      // Title: TAPKAMUN
-      ctx.textAlign = 'center';
-      ctx.shadowColor = cardColor;
-      ctx.shadowBlur = 30;
-      ctx.fillStyle = cardColor;
-      ctx.font = 'bold 42px "Press Start 2P", monospace';
-      ctx.fillText('TAPKAMUN', W / 2, 80);
-      ctx.shadowBlur = 15;
-      ctx.fillText('TAPKAMUN', W / 2, 80);
+    if (cardShowTaps) {
+      ctx.fillStyle = '#00FFFF';
+      ctx.shadowColor = '#00FFFF';
+      ctx.shadowBlur = 10;
+      ctx.font = 'bold 14px "Press Start 2P", monospace';
+      ctx.fillText('BRICKS STACKED', W / 2, statY);
       ctx.shadowBlur = 0;
+      statY += 35;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px "Press Start 2P", monospace';
+      const bricksDisplay = bricks >= 1000000 ? `${(bricks / 1000000).toFixed(1)}M` : bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : String(bricks);
+      ctx.fillText(bricksDisplay, W / 2, statY);
+      statY += 60;
+    }
 
-      // Subtitle
-      ctx.fillStyle = '#ffffff88';
-      ctx.font = '12px "Press Start 2P", monospace';
-      ctx.fillText('TAP TO EARN ON BASE', W / 2, 110);
-
-      // Divider line
-      ctx.strokeStyle = `${cardColor}66`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(60, 140);
-      ctx.lineTo(W - 60, 140);
-      ctx.stroke();
-
-      // Pyramid emoji
-      ctx.font = '80px serif';
-      ctx.fillText('🏺', W / 2, 240);
-
-      // Stats section
-      let statY = 310;
-      ctx.font = 'bold 16px "Press Start 2P", monospace';
-
-      if (cardShowLevel) {
-        ctx.fillStyle = '#FFD700';
-        ctx.shadowColor = '#FFD700';
-        ctx.shadowBlur = 10;
-        ctx.fillText(`LEVEL ${level}`, W / 2, statY);
-        ctx.shadowBlur = 0;
-        statY += 60;
-      }
-
-      if (cardShowTaps) {
-        ctx.fillStyle = '#00FFFF';
-        ctx.shadowColor = '#00FFFF';
-        ctx.shadowBlur = 10;
-        ctx.font = 'bold 14px "Press Start 2P", monospace';
-        ctx.fillText('BRICKS STACKED', W / 2, statY);
-        ctx.shadowBlur = 0;
-        statY += 35;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 28px "Press Start 2P", monospace';
-        const bricksDisplay = bricks >= 1000000 ? `${(bricks / 1000000).toFixed(1)}M` : bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : String(bricks);
-        ctx.fillText(bricksDisplay, W / 2, statY);
-        statY += 60;
-      }
-
-      if (cardShowRefs) {
-        ctx.fillStyle = '#00FF00';
-        ctx.shadowColor = '#00FF00';
-        ctx.shadowBlur = 10;
-        ctx.font = 'bold 14px "Press Start 2P", monospace';
-        ctx.fillText('REFERRALS', W / 2, statY);
-        ctx.shadowBlur = 0;
-        statY += 35;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 28px "Press Start 2P", monospace';
-        ctx.fillText(String(referralStats.total), W / 2, statY);
-        statY += 50;
-      }
-
-      // Divider
-      ctx.strokeStyle = `${cardColor}66`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(60, H - 160);
-      ctx.lineTo(W - 60, H - 160);
-      ctx.stroke();
-
-      // Invite code
-      ctx.fillStyle = '#ffffff88';
-      ctx.font = '11px "Press Start 2P", monospace';
-      ctx.fillText('INVITE CODE', W / 2, H - 130);
-
-      ctx.fillStyle = cardColor;
-      ctx.shadowColor = cardColor;
-      ctx.shadowBlur = 15;
-      ctx.font = 'bold 22px "Press Start 2P", monospace';
-      ctx.fillText(referralCode || '------', W / 2, H - 100);
+    if (cardShowRefs) {
+      ctx.fillStyle = '#00FF00';
+      ctx.shadowColor = '#00FF00';
+      ctx.shadowBlur = 10;
+      ctx.font = 'bold 14px "Press Start 2P", monospace';
+      ctx.fillText('REFERRALS', W / 2, statY);
       ctx.shadowBlur = 0;
+      statY += 35;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px "Press Start 2P", monospace';
+      ctx.fillText(String(referralStats.total), W / 2, statY);
+      statY += 50;
+    }
 
-      // URL
-      ctx.fillStyle = '#ffffff66';
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillText('tapkamun.fun', W / 2, H - 60);
+    // Divider
+    ctx.strokeStyle = `${cardColor}66`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(60, H - 160);
+    ctx.lineTo(W - 60, H - 160);
+    ctx.stroke();
 
-      // Footer accent
-      ctx.fillStyle = cardColor;
-      ctx.fillRect(60, H - 30, W - 120, 3);
+    // 7. Invite code
+    ctx.fillStyle = '#ffffff88';
+    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.fillText('INVITE CODE', W / 2, H - 130);
 
-      // Update preview
-      setSharePreviewUrl(canvas.toDataURL('image/png'));
-    };
+    ctx.fillStyle = cardColor;
+    ctx.shadowColor = cardColor;
+    ctx.shadowBlur = 15;
+    ctx.font = 'bold 22px "Press Start 2P", monospace';
+    ctx.fillText(referralCode || '------', W / 2, H - 100);
+    ctx.shadowBlur = 0;
 
-    // Try loading background image
-    const bgIndex = selectedCardBg + 1;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => draw(img);
-    img.onerror = () => draw(null);
-    img.src = `/images/share-cards/card-${bgIndex}.webp`;
+    // URL
+    ctx.fillStyle = '#ffffff66';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText('tapkamun.fun', W / 2, H - 60);
+
+    // Footer accent
+    ctx.fillStyle = cardColor;
+    ctx.fillRect(60, H - 30, W - 120, 3);
+
+    // 8. Export AFTER everything is drawn
+    const dataUrl = canvas.toDataURL('image/png');
+    setSharePreviewUrl(dataUrl);
+    return dataUrl;
   }, [selectedCardBg, cardColor, cardOpacity, cardShowLevel, cardShowTaps, cardShowRefs, level, bricks, referralStats.total, referralCode]);
 
-  // Redraw when share card settings change
+  // Redraw preview when share card settings change
   useEffect(() => {
-    if (showShareCard) drawShareCard();
-  }, [showShareCard, drawShareCard]);
-
-  const generateShareImage = async () => {
-    drawShareCard();
-    const canvas = shareCanvasRef.current;
-    if (!canvas) return null;
-    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-  };
+    if (showShareCard) generateShareCard();
+  }, [showShareCard, generateShareCard]);
 
   const downloadShareCard = async () => {
-    const blob = await generateShareImage();
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tapkamun-${referralCode || 'card'}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showNotification('📥 CARD SAVED!');
+    setIsGeneratingCard(true);
+    try {
+      const dataUrl = await generateShareCard();
+      if (!dataUrl) return;
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `tapkamun-${referralCode || 'card'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showNotification('📥 CARD SAVED!');
+    } finally {
+      setIsGeneratingCard(false);
+    }
   };
 
   const shareCardOnTwitter = async () => {
-    await downloadShareCard();
-    const tweetText = encodeURIComponent(
-      `I'm Level ${level} on @tapkamunfun 🏺⚡\n\n${bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : bricks} taps and counting!\n\nJoin with my code: ${referralCode}\n👉 https://tapkamun.fun?ref=${referralCode}\n\n#TAPKAMUN #KAMUN #Base #TapToEarn`
-    );
-    window.open(`https://x.com/intent/tweet?text=${tweetText}`, '_blank');
+    setIsGeneratingCard(true);
+    try {
+      const dataUrl = await generateShareCard();
+      if (!dataUrl) return;
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `tapkamun-${referralCode || 'card'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      const tweetText = encodeURIComponent(
+        `I'm Level ${level} on @tapkamunfun \u{1F3FA}\u26A1\n\n${bricks >= 1000 ? `${(bricks / 1000).toFixed(1)}K` : bricks} taps and counting!\n\nJoin with my code: ${referralCode}\n\u{1F449} https://tapkamun.fun?ref=${referralCode}\n\n#TAPKAMUN #KAMUN #Base #TapToEarn`
+      );
+      window.open(`https://x.com/intent/tweet?text=${tweetText}`, '_blank');
+    } finally {
+      setIsGeneratingCard(false);
+    }
   };
 
   const shareCardOnTelegram = async () => {
-    await downloadShareCard();
-    const text = encodeURIComponent(`I'm Level ${level} on TAPKAMUN 🏺⚡ Join with my code: ${referralCode}`);
-    const url = encodeURIComponent(`https://tapkamun.fun?ref=${referralCode}`);
-    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+    setIsGeneratingCard(true);
+    try {
+      const dataUrl = await generateShareCard();
+      if (!dataUrl) return;
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `tapkamun-${referralCode || 'card'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      const text = encodeURIComponent(`I'm Level ${level} on TAPKAMUN \u{1F3FA}\u26A1 Join with my code: ${referralCode}`);
+      const url = encodeURIComponent(`https://tapkamun.fun?ref=${referralCode}`);
+      window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+    } finally {
+      setIsGeneratingCard(false);
+    }
   };
 
   const copyShareLink = () => {
     const link = `https://tapkamun.fun?ref=${referralCode}`;
     navigator.clipboard.writeText(link);
-    showNotification('🔗 LINK COPIED!');
+    showNotification('\u{1F517} LINK COPIED!');
   };
 
   // ========== TOOLTIP HANDLERS ==========
@@ -3466,18 +3498,26 @@ const PyramidMemeEmpireV5 = () => {
               />
             </div>
 
+            {/* Generating overlay */}
+            {isGeneratingCard && (
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                <div style={{ width: 30, height: 30, border: '3px solid #FF00FF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <p style={{ color: '#FF00FF', fontSize: 9, fontFamily: 'inherit', marginTop: 10 }}>GENERATING...</p>
+              </div>
+            )}
+
             {/* Share actions */}
             <div className="share-actions">
-              <button className="share-action-btn share-btn-x" onClick={shareCardOnTwitter}>
+              <button className="share-action-btn share-btn-x" onClick={shareCardOnTwitter} disabled={isGeneratingCard}>
                 SHARE X
               </button>
-              <button className="share-action-btn share-btn-tg" onClick={shareCardOnTelegram}>
+              <button className="share-action-btn share-btn-tg" onClick={shareCardOnTelegram} disabled={isGeneratingCard}>
                 SHARE TG
               </button>
-              <button className="share-action-btn share-btn-dl" onClick={downloadShareCard}>
+              <button className="share-action-btn share-btn-dl" onClick={downloadShareCard} disabled={isGeneratingCard}>
                 DOWNLOAD
               </button>
-              <button className="share-action-btn share-btn-copy" onClick={copyShareLink}>
+              <button className="share-action-btn share-btn-copy" onClick={copyShareLink} disabled={isGeneratingCard}>
                 COPY LINK
               </button>
             </div>
@@ -5249,9 +5289,14 @@ const PyramidMemeEmpireV5 = () => {
           transition: all 0.2s;
         }
 
-        .share-action-btn:hover {
+        .share-action-btn:hover:not(:disabled) {
           transform: scale(1.03);
           filter: brightness(1.2);
+        }
+
+        .share-action-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
         .share-btn-x {
