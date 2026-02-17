@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -17,6 +19,12 @@ const Quest = require('./models/Quest');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false // API-only server, no HTML to protect
+}));
 
 // Middleware
 const allowedOrigins = [
@@ -50,17 +58,23 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
-// Request logging
+// Request logging (redact sensitive fields in production)
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-  if (req.method === 'POST') {
-    console.log('  Content-Type:', req.headers['content-type']);
+  if (req.method === 'POST' && process.env.NODE_ENV !== 'production') {
     console.log('  Body:', JSON.stringify(req.body));
   }
   next();
 });
+
+// Rate limiters
+const authLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many requests', retryAfter: 60 } });
+const adminLoginLimiter = rateLimit({ windowMs: 60000, max: 5, message: { error: 'Too many login attempts', retryAfter: 60 } });
+const shopLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many requests', retryAfter: 60 } });
+const questLimiter = rateLimit({ windowMs: 60000, max: 20, message: { error: 'Too many requests', retryAfter: 60 } });
+const oauthLimiter = rateLimit({ windowMs: 60000, max: 10, message: { error: 'Too many requests', retryAfter: 60 } });
 
 // Health check
 app.get('/health', (req, res) => {
@@ -71,98 +85,18 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Test endpoint to verify body parsing (no auth)
-app.post('/api/test-body', (req, res) => {
-  console.log('[Test] Body received:', req.body);
-  console.log('[Test] Headers:', req.headers);
-  res.json({
-    received: req.body,
-    hasQuestId: !!req.body?.questId,
-    questIdType: typeof req.body?.questId,
-    contentType: req.headers['content-type'],
-    bodyKeys: Object.keys(req.body || {})
-  });
-});
+// Diagnostic endpoints removed in production for security
 
-// Public endpoint to check quest data format (no auth)
-app.get('/api/diagnostics/quests-sample', async (req, res) => {
-  try {
-    // Get transformed quests directly from Quest model
-    const allQuests = await Quest.getAllActive();
-
-    res.json({
-      questCount: allQuests.length,
-      sampleQuests: allQuests.slice(0, 2),
-      questKeys: allQuests[0] ? Object.keys(allQuests[0]) : [],
-      hasQuestId: allQuests[0]?.quest_id ? true : false,
-      hasExternalUrl: allQuests[0]?.external_url ? true : false,
-      hasXpReward: allQuests[0]?.xp_reward ? true : false
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Database diagnostics endpoint
-app.get('/api/diagnostics/tables', async (req, res) => {
-  try {
-    const tablesStatus = await Quest.tablesExist();
-
-    // Count quests if table exists
-    let questCount = 0;
-    if (tablesStatus.quests) {
-      const db = require('./config/database');
-      const result = await db.query('SELECT COUNT(*) as count FROM quests');
-      questCount = parseInt(result.rows[0].count);
-    }
-
-    res.json({
-      status: 'ok',
-      tables: tablesStatus,
-      questCount,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Diagnostics error:', error);
-    res.status(500).json({
-      status: 'error',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-// Manual table initialization endpoint (for debugging)
-app.post('/api/diagnostics/init-quests', async (req, res) => {
-  try {
-    console.log('Manual quest table initialization requested');
-    await Quest.initializeTables();
-    const tablesStatus = await Quest.tablesExist();
-
-    res.json({
-      status: 'ok',
-      message: 'Quest tables initialized',
-      tables: tablesStatus
-    });
-  } catch (error) {
-    console.error('Manual initialization error:', error);
-    res.status(500).json({
-      status: 'error',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/game', gameRoutes);
-app.use('/api/shop', shopRoutes);
+// API Routes (with rate limiting)
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/game', gameRoutes); // tap has its own rate limiter in middleware
+app.use('/api/shop', shopLimiter, shopRoutes);
 app.use('/api/referrals', referralsRoutes);
-app.use('/api/quests', questsRoutes);
+app.use('/api/quests', questLimiter, questsRoutes);
+app.use('/api/admin/login', adminLoginLimiter); // login gets extra-restrictive limiter
 app.use('/api/admin', adminRoutes);
-app.use('/api/oauth', oauthRoutes);
-app.use('/api/public', publicRoutes);
+app.use('/api/oauth', oauthLimiter, oauthRoutes);
+app.use('/api/public', publicRoutes); // has its own rate limiter
 
 // 404 handler
 app.use((req, res) => {
@@ -262,9 +196,7 @@ const startServer = async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to initialize quest tables:', error);
-    console.error('Error details:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('Failed to initialize quest tables:', error.message);
     // Continue anyway - we'll try to initialize on first request
   }
 

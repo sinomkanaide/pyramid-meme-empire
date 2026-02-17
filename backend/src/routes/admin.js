@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { adminAuth, generateAdminToken } = require('../middleware/auth');
 const db = require('../config/database');
 const { calculateLevelFromXp, getXpProgress } = require('../models/GameProgress');
@@ -59,9 +60,9 @@ async function initAdminTables() {
 initAdminTables();
 
 // ============================================================================
-// DIAGNOSTIC - DB column check (no auth required)
+// DIAGNOSTIC - DB column check (requires admin auth)
 // ============================================================================
-router.get('/db-check', async (req, res) => {
+router.get('/db-check', adminAuth, async (req, res) => {
   try {
     const tables = ['taps', 'users', 'game_progress', 'transactions', 'quests', 'quest_completions', 'referrals', 'leaderboard_prizes', 'admin_xp_grants'];
     const result = {};
@@ -105,9 +106,14 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized wallet' });
     }
 
-    // Check password
+    // Check password (timing-safe comparison)
     const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword || password !== adminPassword) {
+    if (!adminPassword) {
+      return res.status(403).json({ error: 'Invalid password' });
+    }
+    const pwBuffer = Buffer.from(password);
+    const adminPwBuffer = Buffer.from(adminPassword);
+    if (pwBuffer.length !== adminPwBuffer.length || !crypto.timingSafeEqual(pwBuffer, adminPwBuffer)) {
       return res.status(403).json({ error: 'Invalid password' });
     }
 
@@ -862,8 +868,8 @@ router.post('/users/:id/grant-xp', async (req, res) => {
     const userId = parseInt(req.params.id);
     const { amount, reason } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Valid amount required' });
+    if (!amount || amount <= 0 || amount > 1000000) {
+      return res.status(400).json({ error: 'Amount must be between 1 and 1,000,000' });
     }
     if (!reason || reason.trim() === '') {
       return res.status(400).json({ error: 'Reason is required' });

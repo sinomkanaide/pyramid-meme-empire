@@ -26,9 +26,7 @@ router.get('/', async (req, res) => {
       } catch (initError) {
         console.error('[Quests] Failed to initialize tables:', initError);
         return res.status(500).json({
-          error: 'Quest tables not initialized',
-          details: initError.message,
-          tablesStatus
+          error: 'Quest system temporarily unavailable'
         });
       }
     }
@@ -48,9 +46,7 @@ router.get('/', async (req, res) => {
     console.error('[Quests] Get quests error:', error);
     console.error('[Quests] Error stack:', error.stack);
     res.status(500).json({
-      error: 'Failed to get quests',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      errorType: error.constructor.name
+      error: 'Failed to get quests'
     });
   }
 });
@@ -82,18 +78,13 @@ router.get('/progress/:questId', async (req, res) => {
 
 // POST /quests/complete - Complete a quest
 router.post('/complete', async (req, res) => {
-    // Debug: log raw body
-    console.log('[Quests] Raw request body:', req.body);
-    console.log('[Quests] questId value:', req.body?.questId, 'type:', typeof req.body?.questId);
-
     const { questId } = req.body;
 
     // Manual validation (simpler than express-validator)
     if (!questId || typeof questId !== 'string' || questId.trim() === '') {
       console.log('[Quests] Invalid questId:', questId);
       return res.status(400).json({
-        error: 'questId is required and must be a non-empty string',
-        receivedBody: req.body
+        error: 'questId is required and must be a non-empty string'
       });
     }
 
@@ -167,10 +158,33 @@ router.post('/complete', async (req, res) => {
           const data = await partnerResponse.json();
           console.log(`[Quests] Partner API response:`, data);
 
-          // Evaluate success condition safely
+          // Evaluate success condition safely (no eval/new Function)
           let verified = false;
           try {
-            verified = new Function('data', `return ${successExpr}`)(data);
+            // Parse simple expressions: "data.field === value" or "data.field == value"
+            const match = successExpr.match(/^data\.(\w+(?:\.\w+)*)\s*(===|==|!==|!=)\s*(.+)$/);
+            if (match) {
+              const [, path, operator, rawValue] = match;
+              // Traverse data object by dot path
+              let actual = data;
+              for (const key of path.split('.')) {
+                actual = actual?.[key];
+              }
+              // Parse expected value
+              let expected;
+              const trimmed = rawValue.trim();
+              if (trimmed === 'true') expected = true;
+              else if (trimmed === 'false') expected = false;
+              else if (trimmed === 'null') expected = null;
+              else if (/^['"].*['"]$/.test(trimmed)) expected = trimmed.slice(1, -1);
+              else if (!isNaN(trimmed)) expected = Number(trimmed);
+              else expected = trimmed;
+              // Compare
+              if (operator === '===' || operator === '==') verified = actual == expected;
+              else if (operator === '!==' || operator === '!=') verified = actual != expected;
+            } else {
+              console.error(`[Quests] Unsupported expression format: ${successExpr}`);
+            }
           } catch (evalErr) {
             console.error(`[Quests] Success expression eval error:`, evalErr);
             verified = false;

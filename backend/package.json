@@ -9,7 +9,12 @@
     "db:init": "node src/config/initDb.js",
     "db:verify": "node src/config/verifyDb.js"
   },
-  "keywords": ["tap-to-earn", "base", "web3", "gaming"],
+  "keywords": [
+    "tap-to-earn",
+    "base",
+    "web3",
+    "gaming"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -17,7 +22,9 @@
     "dotenv": "^16.3.1",
     "ethers": "^6.9.0",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1",
     "express-validator": "^7.0.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.3"
   },

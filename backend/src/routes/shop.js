@@ -235,11 +235,13 @@ router.post('/purchase',
   }
 );
 
-// POST /shop/activate - Demo mode: Activate item without payment verification
-// This is for testing. In production, use /purchase with real tx verification
+// POST /shop/activate - Demo mode: DISABLED in production
 router.post('/activate',
   body('itemId').isString().isIn(Object.keys(SHOP_ITEMS)),
   async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Demo mode disabled in production. Use /purchase with real USDC payment.' });
+    }
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });

@@ -5,6 +5,21 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+// Allowed redirect origins (prevent open redirect attacks)
+const ALLOWED_ORIGINS = [
+  'https://tapkamun.fun',
+  'https://www.tapkamun.fun',
+  'https://pyramid-meme-empire.vercel.app',
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:5173'
+].filter(Boolean);
+
+function sanitizeOrigin(origin) {
+  if (origin && ALLOWED_ORIGINS.includes(origin)) return origin;
+  return 'https://tapkamun.fun';
+}
+
 // ========== PKCE HELPERS ==========
 function generateCodeVerifier() {
   return crypto.randomBytes(32).toString('base64url');
@@ -32,7 +47,7 @@ setInterval(() => {
 router.get('/twitter/connect', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const origin = req.query.origin || 'https://tapkamun.fun';
+    const origin = sanitizeOrigin(req.query.origin);
 
     const state = crypto.randomBytes(16).toString('hex');
     const codeVerifier = generateCodeVerifier();
@@ -186,7 +201,7 @@ router.post('/twitter/disconnect', authenticateToken, async (req, res) => {
 router.get('/discord/connect', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const origin = req.query.origin || 'https://tapkamun.fun';
+    const origin = sanitizeOrigin(req.query.origin);
 
     const state = crypto.randomBytes(16).toString('hex');
 
