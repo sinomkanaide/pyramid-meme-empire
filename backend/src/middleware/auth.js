@@ -141,14 +141,17 @@ const rateLimit = (maxRequests = 100, windowMs = 60000) => {
   };
 };
 
-// Tap rate limiter - different limits for premium vs free users
+// Tap rate limiter - premium/BP bypass, free users limited
 const tapRateLimit = (req, res, next) => {
+  // Premium and Battle Pass users have NO rate limit
+  if (req.user?.isPremium || req.user?.hasBattlePass) {
+    return next();
+  }
+
+  // Free users: 60 taps/min
   const key = req.user?.id || req.ip;
   const now = Date.now();
-
-  // Premium users get 120 taps/min, free users get 30 taps/min
-  const isPremium = req.user?.isPremium;
-  const maxRequests = isPremium ? 120 : 30;
+  const maxRequests = 60;
   const windowMs = 60000;
 
   if (!rateLimits.has(key)) {

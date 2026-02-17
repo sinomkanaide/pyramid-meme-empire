@@ -551,7 +551,6 @@ const PyramidMemeEmpireV5 = () => {
 
   // ========== TAP MECHANICS ==========
   const lastTapTs = useRef(0);
-  const TAP_THROTTLE = 50; // 50ms minimum between taps
 
   const handleTap = async (e) => {
     e.preventDefault();
@@ -559,8 +558,9 @@ const PyramidMemeEmpireV5 = () => {
 
     const now = Date.now();
 
-    // Throttle rapid taps (mobile spam prevention)
-    if (now - lastTapTs.current < TAP_THROTTLE) return;
+    // Premium/BP: no throttle. Free users: 50ms minimum between taps
+    const tapThrottle = (isPremium || hasBattlePass) ? 0 : 50;
+    if (tapThrottle > 0 && now - lastTapTs.current < tapThrottle) return;
     lastTapTs.current = now;
 
     // CRITICAL: Prevent concurrent requests - only one tap at a time
