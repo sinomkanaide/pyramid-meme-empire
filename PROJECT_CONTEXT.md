@@ -1,7 +1,7 @@
 # TAPKAMUN.FUN - Project Context (formerly Pyramid Meme Empire)
 
-> Last Updated: 2026-02-11
-> Status: **Production Ready** - Quest XP fixed, Wallet detection fixed, All systems GO
+> Last Updated: 2026-02-16
+> Status: **Production Ready** - Share cards, Galxe integration, Premium tap fix, All systems GO
 
 ---
 
@@ -15,7 +15,7 @@
 
 ### Ultimo Commit
 ```
-ac10dc3 - fix: quest XP bugs - level recalc, float parsing, lower defaults
+d06743d - fix: premium/BP users no longer hit tap rate limit after ~120 taps
 ```
 
 ### Features Status
@@ -32,6 +32,8 @@ ac10dc3 - fix: quest XP bugs - level recalc, float parsing, lower defaults
 | Discord OAuth | ✅ | OAuth 2.0, connect/disconnect/status |
 | SEO / Branding | ✅ | OG tags, Twitter cards, manifest, robots.txt |
 | Logo / Favicon | ✅ | Golden paw logo, banner text |
+| Share Cards | ✅ | Canvas-rendered PNG, share via X/Telegram/Download |
+| Galxe Integration | ✅ | CORS, public API, success expressions |
 
 ---
 
@@ -848,5 +850,174 @@ detectWallets():
 2. ⬜ Daily quests con reset
 3. ⬜ Quest rewards en $KAMUN tokens
 4. ⬜ Telegram OAuth
-5. ⬜ Crear cuentas sociales reales (Twitter @tapkamun, Discord server, Telegram)
-6. ⬜ Actualizar URLs en quests con enlaces reales
+5. ✅ ~~Crear cuentas sociales reales~~ - URLs actualizadas a @tapkamunfun / @tapkamun
+6. ✅ ~~Actualizar URLs en quests con enlaces reales~~ - Done en f1e7701
+
+---
+
+## SESIÓN 2026-02-12 - QUEST VERIFICATION TYPES + ADMIN EDIT FIXES
+
+### BUGS ENCONTRADOS Y ARREGLADOS
+
+#### 1. Admin quest edit - metadata double-SET
+- **Commit**: 55ef3cf
+- **Causa raíz**: Al editar partner quests, `requirement_metadata` se seteaba dos veces (una para external_url, otra para partner_api_config). PostgreSQL last-write-wins perdía la URL
+- **Fix**: Merge en una sola operación. También `parseInt(reward_amount)` en admin GET para evitar "35.0000000" en el form de edición
+
+#### 2. Quest verification types incorrectos
+- **Commit**: 65f5ca4
+- **Causa raíz**: `transformQuest()` clasificaba todas las quests como 'manual' (GO+VERIFY). Game quests (tap_count, level, brick, stack, purchase) deberían ser 'internal' (CLAIM only)
+- **Fix**:
+  - `transformQuest`: classify tap_count, purchase, brick, stack, level as 'internal'
+  - `canComplete`: add purchase handler (checks transactions table)
+  - `canComplete`: use `total_bricks_earned` for brick/stack quests
+  - `getUserProgress`: query total_bricks_earned and purchase count
+  - Frontend: use `verification_method` to decide GO+VERIFY vs CLAIM button
+  - Migration: referral quest now requires 3 verified referrals, rewards 450 XP
+
+### ARCHIVOS MODIFICADOS
+
+```
+backend/src/models/Quest.js    - transformQuest classification, canComplete handlers, getUserProgress
+backend/src/routes/admin.js    - metadata merge fix, parseInt reward_amount in GET
+backend/src/server.js          - migration for referral quest requirement
+src/pyramid-meme-empire.jsx   - CLAIM vs GO+VERIFY button logic
+```
+
+### COMMITS ESTA SESIÓN
+
+| Commit | Descripción |
+|--------|-------------|
+| 55ef3cf | fix: admin quest edit - metadata double-SET + reward_amount float |
+| 65f5ca4 | fix: quest verification types - auto-verify for game/milestone quests, require 3 referrals |
+
+---
+
+## SESIÓN 2026-02-16 - GALXE, MOBILE FIX, SHARE CARDS, PREMIUM TAP FIX
+
+### FEATURES IMPLEMENTADAS
+
+#### 1. Galxe Integration
+- **Commits**: 44b6d0e, 31b1348, 25347a4
+- Added Galxe domains to CORS allowed origins
+- Updated Galxe config docs: `$address` placeholder, success expressions return `1`/`0` instead of boolean
+- Public API endpoints ready for Galxe credential verification
+
+#### 2. Share Card System
+- **Commits**: f1e7701, 322d210, 639ef16, 0c9957f
+- Canvas-rendered 600x800 PNG share cards
+- 3 background images (webp) in `/public/images/share-cards/`
+- Customizable: background selection, color theme, toggle stats visibility
+- Share options: X (Twitter), Telegram, Download PNG, Copy Link
+- Modal with live preview before sharing
+- Fix: await image load before canvas export (was rendering black)
+- Fix: use webp format for smaller file sizes
+
+#### 3. Quest Seed URLs Updated
+- **Commit**: f1e7701
+- Social quest URLs updated to real accounts: @tapkamunfun (Twitter), @tapkamun (Telegram)
+- Added discord_join quest with real invite link
+
+### BUGS ENCONTRADOS Y ARREGLADOS
+
+#### 1. Mobile tap lag and double-tap zoom
+- **Commit**: 1bf09d4
+- **Causa raíz**: Too many particles (unlimited) + no cleanup + double-tap zoom on mobile
+- **Fix**:
+  - Cap particles at 20 max, cleanup after 1.5s (was 3.5s)
+  - Throttle taps at 50ms minimum interval
+  - Prevent double-tap zoom via `touch-action: manipulation`, viewport meta `user-scalable=no`, `onTouchEnd preventDefault`
+  - `will-change: transform` hint for particle GPU compositing
+
+#### 2. Quest progress tracking and reward values
+- **Commit**: bf18af8
+- **Causa raíz**: Migration targeted wrong requirement_type ('referral_milestone' vs actual 'referral')
+- **Fix**:
+  - Target both 'referral_milestone' and 'referral' in migration
+  - Set correct XP rewards: Stack 100=200 XP, Stack 1000=1000 XP, Invite=450 XP
+  - Add tap_count and referral to XP_REWARDS fallback map
+  - Reload quests when switching to Quests tab (progress was stale)
+  - `parseInt(requirement_value)` in transformQuest (NUMERIC column safety)
+
+#### 3. Quest edit bugs — null-safety, missing fields, ghost defaults
+- **Commit**: 91f2246
+- **Causa raíz**: `transformQuest` falsy-or chains (`|| defaultValue`) treated `0` as falsy, losing valid zero values. Admin edit modal missing fields for game/referral quests. Partner quests always sent ghost boost defaults (20%/30d)
+- **Fix**:
+  - transformQuest: use explicit null checks instead of `||` for reward_amount and requirement_value
+  - PUT endpoint: accept requirement_value, store null for cleared xp_reward, parseInt sort_order
+  - Edit modal: add Target Value field for game/referral quests, add Reward Type selector for partner quests
+  - Only send boost fields when reward type is 'boost'
+
+#### 4. Share card black image
+- **Commits**: 322d210, 639ef16
+- **Causa raíz**: Canvas `drawImage()` called before background image loaded → rendered black
+- **Fix**: Wrap in `img.onload` promise, await before canvas export. Use webp for smaller size
+
+#### 5. CRITICAL: Premium/BP users hit cooldown after ~120 taps
+- **Commit**: d06743d
+- **Causa raíz**: `tapRateLimit` middleware in `auth.js` capped premium at 120 taps/min. Battle Pass wasn't even checked — used free user limit of 30 taps/min
+- **Fix**:
+  - `tapRateLimit`: Premium and BP `return next()` immediately (full bypass, no rate limit)
+  - Free user limit increased from 30 to 60 taps/min
+  - Frontend: `TAP_THROTTLE` now dynamic — 0ms for premium/BP, 50ms for free users
+- **Note**: `GameProgress.processTap` was already correct (no cooldown/energy for premium/BP). Bug was only in the middleware rate limiter
+
+### COMMITS ESTA SESIÓN
+
+| Commit | Descripción |
+|--------|-------------|
+| 44b6d0e | fix: add Galxe domains to CORS allowed origins |
+| 31b1348 | docs: update Galxe config to use $address placeholder |
+| 25347a4 | docs: update Galxe success expressions to return 1/0 instead of boolean |
+| 1bf09d4 | fix: mobile tap lag and double-tap zoom |
+| bf18af8 | fix: quest progress tracking and reward values |
+| 91f2246 | fix: quest edit bugs — null-safety, missing fields, ghost defaults |
+| f1e7701 | feat: add share card system + update quest seed URLs to tapkamun accounts |
+| 322d210 | fix: use webp format for share card backgrounds |
+| 639ef16 | fix: share card black image — await image load before canvas export |
+| 0c9957f | feat: add share card background images (webp) |
+| d06743d | fix: premium/BP users no longer hit tap rate limit after ~120 taps |
+
+### ARCHIVOS MODIFICADOS
+
+```
+backend/src/server.js              - Galxe CORS origins, quest migrations
+backend/src/middleware/auth.js     - tapRateLimit premium/BP bypass
+backend/src/models/Quest.js        - null-safety, parseInt, XP_REWARDS map
+backend/src/routes/admin.js        - quest edit field fixes
+backend/src/config/schema.sql      - quest seed URLs updated
+admin/src/components/QuestManager.jsx - edit modal: target value, reward type
+src/pyramid-meme-empire.jsx        - share cards, mobile tap fix, throttle, quest reload
+index.html                         - viewport meta user-scalable=no
+public/images/share-cards/         - card-1.webp, card-2.webp, card-3.webp
+```
+
+### TAP RATE LIMITING (DISEÑO FINAL)
+
+```
+FREE users:
+  - Backend: 60 taps/min rate limit
+  - Backend: 2s cooldown between taps (processTap)
+  - Backend: energy system (100 max, -1 per tap)
+  - Frontend: 50ms throttle
+
+PREMIUM users:
+  - Backend: NO rate limit (bypass middleware)
+  - Backend: NO cooldown (processTap skips)
+  - Backend: unlimited energy
+  - Frontend: 0ms throttle
+
+BATTLE PASS users:
+  - Backend: NO rate limit (bypass middleware)
+  - Backend: NO cooldown (processTap skips)
+  - Backend: unlimited energy, X5 boost, +10% XP
+  - Frontend: 0ms throttle
+```
+
+### PENDIENTES ACTUALIZADOS
+
+1. ⬜ Progress bars visuales para milestone quests
+2. ⬜ Daily quests con reset
+3. ⬜ Quest rewards en $KAMUN tokens
+4. ⬜ Telegram OAuth
+5. ⬜ Marketing y lanzamiento oficial
