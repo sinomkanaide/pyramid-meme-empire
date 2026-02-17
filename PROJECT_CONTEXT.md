@@ -15,7 +15,7 @@
 
 ### Ultimo Commit
 ```
-d06743d - fix: premium/BP users no longer hit tap rate limit after ~120 taps
+70710d6 - security: comprehensive security audit + rate limiting + input validation
 ```
 
 ### Features Status
@@ -1021,3 +1021,141 @@ BATTLE PASS users:
 3. ⬜ Quest rewards en $KAMUN tokens
 4. ⬜ Telegram OAuth
 5. ⬜ Marketing y lanzamiento oficial
+
+---
+
+## SESIÓN 2026-02-16 (Parte 2) - SECURITY AUDIT COMPLETA
+
+### Commit: 70710d6
+
+### VULNERABILIDADES ENCONTRADAS Y CORREGIDAS
+
+#### CRITICAL
+
+1. **RCE via `new Function(successExpr)` en quests.js**
+   - Partner quest success expressions usaban `new Function()` (equivalente a `eval()`)
+   - Admin con quest maliciosa = ejecución de código arbitrario en el servidor
+   - **Fix**: Reemplazado con parser seguro que solo acepta `data.field === value`
+
+2. **`/shop/activate` — compras gratis sin pago USDC**
+   - Endpoint "demo" estaba activo en producción
+   - Cualquier usuario autenticado podía obtener Battle Pass/Premium gratis
+   - **Fix**: `if (NODE_ENV === 'production') return 403`
+
+3. **`/api/diagnostics/*` — 3 endpoints sin autenticación**
+   - `/api/diagnostics/quests-sample` — exponía schema de quests
+   - `/api/diagnostics/tables` — exponía schema completo de la DB
+   - `/api/diagnostics/init-quests` — POST público que reinicializaba tablas
+   - **Fix**: Eliminados completamente
+
+4. **`/api/admin/db-check` — schema DB expuesto sin auth**
+   - Exponía nombres de todas las tablas y columnas (information_schema)
+   - **Fix**: Agregado `adminAuth` middleware
+
+5. **`/api/test-body` — debug endpoint público**
+   - **Fix**: Eliminado
+
+#### HIGH
+
+6. **POST body logging en producción**
+   - `console.log('Body:', JSON.stringify(req.body))` en CADA POST request
+   - Logueaba passwords de admin, wallet signatures, txHashes en Railway logs
+   - **Fix**: Solo logea body en development
+
+7. **Sin rate limiting en auth, shop, quests, oauth**
+   - Endpoints críticos sin protección contra brute force/spam
+   - **Fix**: `express-rate-limit` por ruta:
+     * auth: 10/min
+     * admin login: 5/min
+     * shop: 10/min
+     * quests: 20/min
+     * oauth: 10/min
+     * tap: ya tenía su propio rate limiter
+
+8. **Admin password — plain text comparison**
+   - Vulnerable a timing attacks
+   - **Fix**: `crypto.timingSafeEqual` con buffers de igual longitud
+
+9. **OAuth open redirect**
+   - `origin` query param se usaba como redirect sin validar
+   - Attacker podía redirigir a `https://evil.com` con username en URL
+   - **Fix**: Whitelist de orígenes permitidos (`sanitizeOrigin()`)
+
+10. **Sin security headers**
+    - No helmet.js, sin X-Content-Type-Options, X-Frame-Options, etc.
+    - **Fix**: `helmet()` middleware con CSP deshabilitado (API-only)
+
+#### MEDIUM
+
+11. **`express.json()` sin límite de tamaño**
+    - Default 100kb, permite payloads grandes
+    - **Fix**: `{ limit: '10kb' }`
+
+12. **Admin XP grant sin cap máximo**
+    - Admin (o atacante con JWT robado) podía dar 999,999,999 XP
+    - **Fix**: Max 1,000,000 por grant
+
+13. **Error responses leaking internals**
+    - `receivedBody`, `tablesStatus`, `errorType`, `error.stack` en responses
+    - **Fix**: Mensajes genéricos en producción
+
+### LO QUE YA ESTABA BIEN
+
+- **SQL Injection**: Todas las queries usan parameterized queries (`$1`, `$2`) — seguro
+- **Payment verification**: Anti-replay txHash, sender check, amount check, USDC contract check — sólido
+- **JWT auth**: Tokens expiran (7d user, 8h admin), middleware verifica firma
+- **Admin routes**: `router.use(adminAuth)` protege todas las rutas post-login
+- **Quest completion**: Verifica `isCompleted` antes de dar XP — no se puede duplicar
+- **CORS**: Whitelist explícita, no wildcard en producción (excepto `/api/public/*` que es intencional)
+- **Wallet auth**: Nonce + signature verification con ethers.js — correcto
+- **Boost downgrade**: No se puede comprar X2 si X5 activo — validado
+
+### DEPENDENCIAS NUEVAS
+
+```json
+"helmet": "^8.x",
+"express-rate-limit": "^7.x"
+```
+
+### RATE LIMITING FINAL (TODOS LOS ENDPOINTS)
+
+```
+/api/auth/*          → 10 req/min (por IP)
+/api/admin/login     → 5 req/min (por IP, extra restrictivo)
+/api/admin/*         → Sin rate limit adicional (ya requiere adminAuth)
+/api/shop/*          → 10 req/min (por user)
+/api/quests/*        → 20 req/min (por user)
+/api/oauth/*         → 10 req/min (por user)
+/api/game/tap        → FREE: 60/min, PREMIUM/BP: bypass (custom middleware)
+/api/public/*        → 60 req/min por IP (ya tenía su propio)
+```
+
+### ENV VARS A VERIFICAR EN RAILWAY
+
+| Variable | Estado | Acción requerida |
+|----------|--------|-----------------|
+| `JWT_SECRET` | ⚠️ VERIFICAR | Debe ser 32+ chars aleatorio, NO el default |
+| `ADMIN_PASSWORD` | ⚠️ VERIFICAR | Mínimo 16 chars con símbolos |
+| `NODE_ENV` | ⚠️ VERIFICAR | DEBE ser `production` (bloquea /activate y body logging) |
+| `SHOP_WALLET_ADDRESS` | ✅ | Ya configurado |
+| `BASE_RPC_URL` | ⚠️ RECOMENDADO | Usar RPC privado (Alchemy/Infura) en vez del público |
+
+### ARCHIVOS MODIFICADOS
+
+```
+backend/package.json               - +helmet, +express-rate-limit
+backend/src/server.js              - helmet, rate limiters, remove diagnostics, body log redact, json limit
+backend/src/routes/quests.js       - safe expression parser (no new Function), remove debug logs, clean errors
+backend/src/routes/shop.js         - /activate blocked in production
+backend/src/routes/admin.js        - db-check auth, timingSafeEqual, XP cap
+backend/src/routes/oauth.js        - sanitizeOrigin whitelist
+```
+
+### RECOMENDACIONES FUTURAS (NO implementadas)
+
+1. ⬜ **Redis** para nonces y rate limiting (en vez de in-memory Maps) — resiste restarts/scaling
+2. ⬜ **ADMIN_JWT_SECRET** separado del user JWT_SECRET
+3. ⬜ **2 confirmaciones** mínimas en paymentService (actualmente 1)
+4. ⬜ **Bot detection** — detectar patrones de tap con intervalos exactos
+5. ⬜ **Audit log table** — registrar eventos de seguridad en DB
+6. ⬜ **SSL certificate validation** en DB connection (`rejectUnauthorized: true` + CA cert)
