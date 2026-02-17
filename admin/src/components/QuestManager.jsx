@@ -42,6 +42,18 @@ export default function QuestManager({ apiCall }) {
     }
   }
 
+  const reorderQuest = async (id, direction) => {
+    try {
+      await apiCall(`/api/admin/quests/${id}/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify({ direction })
+      })
+      loadQuests()
+    } catch (err) {
+      alert('Failed: ' + err.message)
+    }
+  }
+
   const saveQuest = async (id, data) => {
     try {
       await apiCall(`/api/admin/quests/${id}`, {
@@ -83,7 +95,7 @@ export default function QuestManager({ apiCall }) {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Order</th>
               <th></th>
               <th>Title</th>
               <th>Type</th>
@@ -99,7 +111,10 @@ export default function QuestManager({ apiCall }) {
               const vl = getVerificationLabel(quest.requirement_type)
               return (
               <tr key={quest.id} className={!quest.is_active ? 'row-dimmed' : ''}>
-                <td>{quest.id}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-sm" style={{ padding: '2px 6px', marginRight: 2 }} onClick={() => reorderQuest(quest.id, 'up')}>↑</button>
+                  <button className="btn btn-sm" style={{ padding: '2px 6px' }} onClick={() => reorderQuest(quest.id, 'down')}>↓</button>
+                </td>
                 <td>{quest.icon}</td>
                 <td className="font-bold">{quest.title}</td>
                 <td><span className="badge">{quest.quest_type}</span></td>

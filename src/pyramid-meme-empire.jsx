@@ -291,7 +291,7 @@ const PyramidMemeEmpireV5 = () => {
     return wallets;
   };
 
-  const connectWallet = async (selectedProvider = null) => {
+  const connectWallet = async (selectedProvider = null, _retryCount = 0) => {
     // Guard: if called from onClick, the event object gets passed - ignore it
     if (selectedProvider && !selectedProvider.provider) {
       selectedProvider = null;
@@ -337,7 +337,14 @@ const PyramidMemeEmpireV5 = () => {
           showNotification(`⏱️ ${name.toUpperCase()} TIMEOUT - TRY AGAIN`);
         } else if (err.code === 4001) {
           showNotification('❌ CONNECTION REJECTED');
-        } else if (err.message?.includes('service worker')) {
+        } else if (err.message?.includes('service worker') || err.message?.includes('Receiving end does not exist') || err.message?.includes('Could not establish connection')) {
+          // Extension not ready - retry up to 3 times with delay
+          if (_retryCount < 3) {
+            console.log(`[${name}] Connection not ready, retrying (${_retryCount + 1}/3)...`);
+            setIsConnecting(false);
+            await new Promise(r => setTimeout(r, 800));
+            return connectWallet(selectedProvider, _retryCount + 1);
+          }
           showNotification(`🔧 ${name.toUpperCase()} ERROR - RESTART BROWSER`);
         } else if (err.message?.includes('Unexpected error') || err.message === 'Me: Unexpected error') {
           // Phantom EVM bridge error - try alternate provider or retry
@@ -3017,7 +3024,10 @@ const PyramidMemeEmpireV5 = () => {
 
                 {/* Quests List */}
                 <div className="quests-list">
-                  {quests.map((quest) => {
+                  {[...quests].sort((a, b) => {
+                    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+                    return (a.sort_order || 0) - (b.sort_order || 0);
+                  }).map((quest) => {
                     const vs = questVerifyState[quest.quest_id] || {};
                     const isSocial = quest.verification_method === 'manual';
                     const isPartner = quest.verification_method === 'kiichain_api' || quest.verification_method === 'partner_api';

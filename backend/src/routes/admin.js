@@ -670,6 +670,50 @@ router.patch('/quests/:id/toggle', async (req, res) => {
   }
 });
 
+// PATCH /admin/quests/:id/reorder - Move quest up or down
+router.patch('/quests/:id/reorder', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { direction } = req.body; // 'up' or 'down'
+
+    if (!['up', 'down'].includes(direction)) {
+      return res.status(400).json({ error: 'Direction must be "up" or "down"' });
+    }
+
+    // Get current quest
+    const current = await db.query('SELECT id, sort_order FROM quests WHERE id = $1', [parseInt(id)]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: 'Quest not found' });
+    }
+
+    const currentOrder = current.rows[0].sort_order || 0;
+
+    // Find the neighbor to swap with
+    const neighbor = await db.query(
+      direction === 'up'
+        ? 'SELECT id, sort_order FROM quests WHERE sort_order < $1 ORDER BY sort_order DESC LIMIT 1'
+        : 'SELECT id, sort_order FROM quests WHERE sort_order > $1 ORDER BY sort_order ASC LIMIT 1',
+      [currentOrder]
+    );
+
+    if (neighbor.rows.length === 0) {
+      return res.json({ success: true, message: 'Already at the edge' });
+    }
+
+    const neighborId = neighbor.rows[0].id;
+    const neighborOrder = neighbor.rows[0].sort_order;
+
+    // Swap sort_orders
+    await db.query('UPDATE quests SET sort_order = $1, updated_at = NOW() WHERE id = $2', [neighborOrder, parseInt(id)]);
+    await db.query('UPDATE quests SET sort_order = $1, updated_at = NOW() WHERE id = $2', [currentOrder, neighborId]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin reorder quest error:', error);
+    res.status(500).json({ error: 'Failed to reorder quest' });
+  }
+});
+
 // ============================================================================
 // USER MANAGEMENT
 // ============================================================================
