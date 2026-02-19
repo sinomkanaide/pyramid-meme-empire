@@ -559,12 +559,19 @@ const PyramidMemeEmpireV5 = () => {
   // ========== TAP MECHANICS ==========
   const lastTapTs = useRef(0);
 
+  const getTapCoords = (e) => {
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    if (touch) return { x: touch.clientX, y: touch.clientY };
+    return { x: e.clientX, y: e.clientY };
+  };
+
   const handleTap = async (e) => {
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
       e.stopPropagation();
     }
 
+    const tapCoords = getTapCoords(e);
     const now = Date.now();
 
     // Premium/BP: no throttle. Free users: 50ms minimum between taps
@@ -634,7 +641,7 @@ const PyramidMemeEmpireV5 = () => {
         setPyramidPulse(true);
         setTimeout(() => setPyramidPulse(false), 300);
         playCoinSound();
-        createParticles(e.clientX, e.clientY);
+        createParticles(tapCoords.x, tapCoords.y);
       } catch (err) {
         if (err.message?.includes('cooldown') || err.message?.includes('Wait') || err.message?.includes('Too many')) {
           showNotification('⏱️ COOLDOWN!');
@@ -683,7 +690,7 @@ const PyramidMemeEmpireV5 = () => {
     setTimeout(() => setPyramidPulse(false), 300);
 
     playCoinSound();
-    createParticles(e.clientX, e.clientY);
+    createParticles(tapCoords.x, tapCoords.y);
 
     // Update quest progress
     if (bricks + 1 >= 100) {
