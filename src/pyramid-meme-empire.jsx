@@ -560,8 +560,10 @@ const PyramidMemeEmpireV5 = () => {
   const lastTapTs = useRef(0);
 
   const handleTap = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     const now = Date.now();
 
@@ -2821,7 +2823,7 @@ const PyramidMemeEmpireV5 = () => {
                 id="tap-area"
                 className="tap-area-full"
                 onClick={handleTap}
-                onTouchEnd={(e) => { e.preventDefault(); handleTap(e.changedTouches?.[0] || e); }}
+                onTouchEnd={(e) => { e.preventDefault(); handleTap(e); }}
               >
                 <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
                   <div className="pyramid-grid">
