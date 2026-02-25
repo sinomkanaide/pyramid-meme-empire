@@ -10,7 +10,6 @@ const BASE_CHAIN_ID = 8453;
 const USDC_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
   'function balanceOf(address owner) view returns (uint256)',
-  'function decimals() view returns (uint8)',
 ];
 
 const USDC_PRICES = {
@@ -1226,9 +1225,9 @@ const PyramidMemeEmpireV5 = () => {
         throw new Error(`Insufficient USDC balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
       }
 
-      // 4. Send USDC transfer (value: "0x0" required for Phantom wallet compatibility)
+      // 4. Send USDC transfer (NO overrides - let wallet handle gas estimation)
       setPurchaseStatus('signing');
-      const tx = await usdcContract.transfer(SHOP_WALLET, price, { value: "0x0" });
+      const tx = await usdcContract.transfer(SHOP_WALLET, price);
 
       // 5. Wait for confirmations
       setPurchaseStatus('confirming');
