@@ -10,6 +10,7 @@ const BASE_CHAIN_ID = 8453;
 const USDC_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
   'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
 ];
 
 const USDC_PRICES = {
@@ -1225,9 +1226,9 @@ const PyramidMemeEmpireV5 = () => {
         throw new Error(`Insufficient USDC balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
       }
 
-      // 4. Send USDC transfer
+      // 4. Send USDC transfer (value: "0x0" required for Phantom wallet compatibility)
       setPurchaseStatus('signing');
-      const tx = await usdcContract.transfer(SHOP_WALLET, price);
+      const tx = await usdcContract.transfer(SHOP_WALLET, price, { value: "0x0" });
 
       // 5. Wait for confirmations
       setPurchaseStatus('confirming');
@@ -1260,8 +1261,8 @@ const PyramidMemeEmpireV5 = () => {
       console.error('[Purchase] Error:', error);
       setPurchaseStatus('error');
 
-      // Handle common MetaMask errors
-      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+      // Handle user rejection
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001 || error.message?.includes('user rejected')) {
         return { success: false, error: 'Transaction cancelled by user' };
       }
 
@@ -1270,7 +1271,12 @@ const PyramidMemeEmpireV5 = () => {
         return { success: false, error: 'Not enough ETH for gas fees. You need a small amount of ETH on Base.' };
       }
 
-      return { success: false, error: error.message };
+      // Handle insufficient USDC
+      if (error.message?.includes('Insufficient USDC')) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: false, error: 'Transaction failed. Please try again.' };
     }
   };
 
