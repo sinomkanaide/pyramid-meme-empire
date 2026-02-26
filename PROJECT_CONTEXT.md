@@ -1,7 +1,7 @@
 # TAPKAMUN.FUN - Project Context (formerly Pyramid Meme Empire)
 
-> Last Updated: 2026-02-16
-> Status: **Production Ready** - Share cards, Galxe integration, Premium tap fix, All systems GO
+> Last Updated: 2026-02-25
+> Status: **Production Ready** - Phantom USDC fix, Share cards, Galxe integration, All systems GO
 
 ---
 
@@ -1150,6 +1150,82 @@ backend/src/routes/shop.js         - /activate blocked in production
 backend/src/routes/admin.js        - db-check auth, timingSafeEqual, XP cap
 backend/src/routes/oauth.js        - sanitizeOrigin whitelist
 ```
+
+---
+
+## SESIÓN 2026-02-25 - HOTFIX: USDC PHANTOM + RESPONSIVE LAYOUT
+
+### Commits: d05450a, 69aead8, 026b9aa, 1d0836a
+
+### BUG 1 (CRÍTICO): USDC PURCHASE FALLA EN PHANTOM WALLET
+
+- **Síntoma**: Error `-32603, Unexpected error` en `eth_sendTransaction`. Payload contenía `"gas": "0xb173"` explícito
+- **MetaMask**: ✅ Funcionaba | **Phantom**: ❌ Fallaba
+- **Causa raíz**: ethers.js `contract.transfer()` internamente llama `estimateGas` y agrega campo `gas` al payload. Phantom rechaza transacciones ERC-20 con campo gas explícito
+- **Intentos fallidos**:
+  1. `{ value: "0x0" }` overrides → ethers.js seguía agregando gas (d05450a)
+  2. Sin overrides `contract.transfer(to, amount)` → ethers.js seguía agregando gas (69aead8)
+- **Solución definitiva** (026b9aa): Raw `eth_sendTransaction` via `walletProvider.request()`
+  - Encode calldata manualmente con `ethers.Interface.encodeFunctionData()`
+  - Enviar solo `{ from, to, data }` — SIN gas, gasLimit, gasPrice, value
+  - La wallet estima gas por su cuenta
+  - Contrato USDC solo se usa para lectura (`balanceOf` con `provider`, no `signer`)
+
+**Patrón correcto (universal):**
+```javascript
+const iface = new ethers.Interface(['function transfer(address to, uint256 amount) returns (bool)']);
+const data = iface.encodeFunctionData('transfer', [SHOP_WALLET, price]);
+const txHash = await walletProvider.request({
+  method: 'eth_sendTransaction',
+  params: [{ from: userAddress, to: USDC_ADDRESS, data: data }]
+});
+const receipt = await provider.waitForTransaction(txHash, 2);
+```
+
+### BUG 2: PIRÁMIDE SE SUPERPONE CON STATS EN PANTALLAS BAJAS
+
+- **Síntoma**: En tablets horizontales (1024x768) y monitores bajos, la pirámide invade el área de stats
+- **Commit**: 1d0836a
+
+**Fixes aplicados:**
+
+1. **Z-index hierarchy**: Stats (100) > Energy bar (50) > Pyramid (10)
+2. **Pyramid container**: `max-height: 60vh`, `overflow: hidden`, flexbox centered
+3. **Tap area**: `min-height: 200px` (siempre tapeable), `overflow: hidden`
+4. **Media queries progresivas**:
+
+| Viewport height | Pyramid grid | Moai size | Max pyramid height |
+|----------------|-------------|-----------|-------------------|
+| > 700px | 32px × 48px | 38px | 60vh |
+| ≤ 700px | 26px × 40px | 32px | 50vh |
+| ≤ 600px | 22px × 34px | 26px | 45vh |
+| Landscape ≤ 600px | 22px × 32px | 26px | 45vh |
+
+### COMPATIBILIDAD WALLETS (FINAL)
+
+| Wallet | Status |
+|--------|--------|
+| MetaMask | ✅ |
+| Phantom | ✅ |
+| Coinbase Wallet | ✅ |
+| Trust Wallet | ✅ |
+
+### ARCHIVOS MODIFICADOS
+
+```
+src/pyramid-meme-empire.jsx   - Raw eth_sendTransaction, z-index hierarchy, responsive media queries
+```
+
+### COMMITS
+
+| Commit | Descripción |
+|--------|-------------|
+| d05450a | fix: USDC purchase - add value:"0x0" (insuficiente) |
+| 69aead8 | fix: remove gas parameter (insuficiente) |
+| 026b9aa | fix: raw eth_sendTransaction without gas (solución definitiva) |
+| 1d0836a | fix: responsive layout - prevent pyramid overlap on short screens |
+
+---
 
 ### RECOMENDACIONES FUTURAS (NO implementadas)
 

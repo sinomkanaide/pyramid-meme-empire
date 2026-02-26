@@ -146,6 +146,9 @@ const runMigrations = async () => {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_username VARCHAR(100)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id VARCHAR(100)',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username VARCHAR(100)',
+    // Anti-bot flagging columns
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT false',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS flag_reason TEXT',
     // Fix referral quest: require 3 verified referrals, reward 450 XP
     `UPDATE quests SET requirement_value = 3, reward_amount = 450 WHERE requirement_type IN ('referral_milestone', 'referral')`,
     // Fix Stack 100 Bricks: 200 XP

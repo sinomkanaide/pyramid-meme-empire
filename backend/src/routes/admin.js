@@ -747,6 +747,8 @@ router.get('/users', async (req, res) => {
       whereClause += ' AND u.has_battle_pass = true';
     } else if (filter === 'banned') {
       whereClause += ' AND u.is_banned = true';
+    } else if (filter === 'flagged') {
+      whereClause += ' AND u.is_flagged = true';
     }
 
     // Count total
@@ -759,7 +761,7 @@ router.get('/users', async (req, res) => {
     // Get users with game progress
     const usersResult = await db.query(`
       SELECT u.id, u.wallet_address, u.username, u.is_premium, u.has_battle_pass,
-             u.is_banned, u.created_at, u.referral_code,
+             u.is_banned, u.is_flagged, u.flag_reason, u.created_at, u.referral_code,
              gp.level, gp.bricks, gp.total_taps, gp.energy, gp.pme_tokens
       FROM users u
       LEFT JOIN game_progress gp ON gp.user_id = u.id
@@ -1244,6 +1246,158 @@ router.post('/recalculate-levels', async (req, res) => {
   } catch (error) {
     console.error('[Admin] Recalculate levels error:', error);
     res.status(500).json({ error: 'Failed to recalculate levels' });
+  }
+});
+
+// ============================================================================
+// ANTI-BOT: AUDIT + FLAG/UNFLAG
+// ============================================================================
+
+// POST /admin/audit-user - Analyze user for bot behavior
+router.post('/audit-user', async (req, res) => {
+  try {
+    const { walletAddress, userId } = req.body;
+    if (!walletAddress && !userId) return res.status(400).json({ error: 'walletAddress or userId required' });
+
+    const userResult = userId
+      ? await db.query(`
+          SELECT u.*, gp.bricks, gp.level, gp.total_taps, gp.total_bricks_earned
+          FROM users u
+          LEFT JOIN game_progress gp ON u.id = gp.user_id
+          WHERE u.id = $1
+        `, [userId])
+      : await db.query(`
+          SELECT u.*, gp.bricks, gp.level, gp.total_taps, gp.total_bricks_earned
+          FROM users u
+          LEFT JOIN game_progress gp ON u.id = gp.user_id
+          WHERE LOWER(u.wallet_address) = LOWER($1)
+        `, [walletAddress]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+    const registeredAt = new Date(user.created_at);
+    const now = new Date();
+    const hoursSinceRegistration = Math.max(0.1, (now - registeredAt) / (1000 * 60 * 60));
+    const tapsPerHour = (user.total_taps || 0) / hoursSinceRegistration;
+    const tapsPerMinute = tapsPerHour / 60;
+
+    // Get tap distribution (taps per hour in last 24h)
+    let tapDistribution = [];
+    try {
+      const distResult = await db.query(`
+        SELECT date_trunc('hour', tapped_at) as hour, COUNT(*) as count
+        FROM taps
+        WHERE user_id = $1 AND tapped_at >= NOW() - INTERVAL '24 hours'
+        GROUP BY date_trunc('hour', tapped_at)
+        ORDER BY hour DESC
+      `, [user.id]);
+      tapDistribution = distResult.rows.map(r => ({
+        hour: r.hour,
+        count: parseInt(r.count)
+      }));
+    } catch (e) { /* taps table may vary */ }
+
+    // Get purchases
+    let purchases = [];
+    try {
+      const purchasesResult = await db.query(`
+        SELECT type, amount, created_at
+        FROM transactions
+        WHERE user_id = $1 AND status = 'confirmed'
+        ORDER BY created_at DESC
+      `, [user.id]);
+      purchases = purchasesResult.rows;
+    } catch (e) { /* ok */ }
+
+    // Calculate bot score (0-100)
+    let botScore = 0;
+    const suspiciousPatterns = [];
+
+    if (tapsPerMinute > 100) {
+      botScore += 30;
+      suspiciousPatterns.push(`Sustained ${tapsPerMinute.toFixed(0)} taps/min avg`);
+    }
+    if (tapsPerMinute > 150) {
+      botScore += 30;
+      suspiciousPatterns.push('Extremely high tap rate (150+ taps/min)');
+    }
+    if (hoursSinceRegistration > 5 && tapsPerMinute > 80) {
+      botScore += 25;
+      suspiciousPatterns.push('Sustained high tap rate for 5+ hours');
+    }
+    if (purchases.length === 0 && tapsPerMinute > 100) {
+      botScore += 15;
+      suspiciousPatterns.push('High tap rate with no purchases');
+    }
+
+    // Check for sustained activity without breaks
+    const peakHour = tapDistribution.reduce((max, h) => h.count > max ? h.count : max, 0);
+    if (peakHour > 7200) { // 120 taps/min * 60 min
+      botScore += 20;
+      suspiciousPatterns.push(`Peak hour: ${peakHour} taps (${Math.round(peakHour / 60)}/min)`);
+    }
+
+    res.json({
+      wallet: user.wallet_address,
+      userId: user.id,
+      username: user.username,
+      registeredAt: user.created_at,
+      hoursSinceRegistration: hoursSinceRegistration.toFixed(1),
+      totalTaps: user.total_taps || 0,
+      tapsPerHour: Math.round(tapsPerHour),
+      tapsPerMinuteAvg: tapsPerMinute.toFixed(1),
+      level: user.level || 1,
+      bricks: user.bricks || 0,
+      isPremium: user.is_premium,
+      hasBattlePass: user.has_battle_pass,
+      purchases,
+      tapDistribution,
+      suspiciousPatterns,
+      botScore: Math.min(100, botScore),
+      isFlagged: user.is_flagged || false,
+      flagReason: user.flag_reason || null
+    });
+  } catch (error) {
+    console.error('[Admin] Audit error:', error);
+    res.status(500).json({ error: 'Audit failed' });
+  }
+});
+
+// POST /admin/users/:id/flag - Flag user as suspicious
+router.post('/users/:id/flag', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { reason } = req.body;
+    const result = await db.query(
+      `UPDATE users SET is_flagged = true, flag_reason = $1, updated_at = NOW() WHERE id = $2 RETURNING id, wallet_address, is_flagged, flag_reason`,
+      [reason || 'Manually flagged by admin', userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    console.log(`[Admin] User ${userId} flagged: ${reason || 'manual'}`);
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('[Admin] Flag error:', error);
+    res.status(500).json({ error: 'Failed to flag user' });
+  }
+});
+
+// POST /admin/users/:id/unflag - Remove flag
+router.post('/users/:id/unflag', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const result = await db.query(
+      `UPDATE users SET is_flagged = false, flag_reason = NULL, updated_at = NOW() WHERE id = $1 RETURNING id, wallet_address, is_flagged`,
+      [userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    console.log(`[Admin] User ${userId} unflagged`);
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('[Admin] Unflag error:', error);
+    res.status(500).json({ error: 'Failed to unflag user' });
   }
 });
 

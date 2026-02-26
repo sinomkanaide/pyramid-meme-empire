@@ -15,7 +15,7 @@ class GameProgress {
   // hasBattlePass: grants X5 boost, +10% XP, no cooldown, no energy use
   // referralBonusMultiplier: 1.0 base + 0.1 per verified referral (e.g., 1.3 = +30%)
   // questBonusMultiplier: 1.2 if KiiChain quest completed (active), 1.0 otherwise
-  static async processTap(userId, isPremium = false, hasBattlePass = false, referralBonusMultiplier = 1, questBonusMultiplier = 1, sessionId = null, ipAddress = null) {
+  static async processTap(userId, isPremium = false, hasBattlePass = false, referralBonusMultiplier = 1, questBonusMultiplier = 1, sessionId = null, ipAddress = null, shadowMultiplier = 1) {
     const progress = await this.findByUserId(userId);
 
     if (!progress) {
@@ -69,8 +69,8 @@ class GameProgress {
 
     // Referral bonus: +10% per verified referral (BP only)
     // Quest bonus: +20% from KiiChain (all users, independent)
-    const totalMultiplier = baseXP * battlePassBonus * referralBonusMultiplier * questBonusMultiplier;
-    const bricksEarned = Math.max(1, Math.floor(totalMultiplier));
+    const totalMultiplier = baseXP * battlePassBonus * referralBonusMultiplier * questBonusMultiplier * shadowMultiplier;
+    const bricksEarned = Math.max(shadowMultiplier < 1 ? 0 : 1, Math.floor(totalMultiplier));
 
     const energyUsed = hasUnlimitedEnergy ? 0 : 1;
     const newBricks = progress.bricks + bricksEarned;

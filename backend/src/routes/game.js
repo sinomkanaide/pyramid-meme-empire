@@ -82,11 +82,122 @@ router.get('/progress', async (req, res) => {
   }
 });
 
+// ========== BOT DETECTION ==========
+// Track tap timestamps per user in memory (last 20 taps)
+const tapTimestamps = new Map();
+
+function detectBot(userId) {
+  if (!tapTimestamps.has(userId)) {
+    tapTimestamps.set(userId, []);
+  }
+
+  const timestamps = tapTimestamps.get(userId);
+  const now = Date.now();
+  timestamps.push(now);
+
+  // Keep only last 20
+  if (timestamps.length > 20) {
+    timestamps.shift();
+  }
+
+  // Need at least 10 taps to analyze
+  if (timestamps.length < 10) {
+    return { isBot: false, flags: [], tapsPerMinute: 0 };
+  }
+
+  const flags = [];
+
+  // Calculate intervals between taps
+  const intervals = [];
+  for (let i = 1; i < timestamps.length; i++) {
+    intervals.push(timestamps[i] - timestamps[i - 1]);
+  }
+
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const variance = intervals.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / intervals.length;
+  const stdDev = Math.sqrt(variance);
+  const tapsPerMinute = 60000 / avg;
+
+  // Flag 1: Intervals too short (< 200ms avg = 300+ taps/min)
+  if (avg < 200) {
+    flags.push('avg_interval_too_short');
+  }
+
+  // Flag 2: Very consistent intervals (bot-like precision)
+  if (stdDev < 50 && avg < 500) {
+    flags.push('consistent_intervals');
+  }
+
+  // Flag 3: Extreme tap rate
+  if (tapsPerMinute > 150) {
+    flags.push('extreme_tap_rate');
+  }
+
+  return {
+    isBot: flags.length >= 2,
+    flags,
+    tapsPerMinute: Math.round(tapsPerMinute)
+  };
+}
+
+// Clean up old entries every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [userId, timestamps] of tapTimestamps.entries()) {
+    if (timestamps.length === 0 || timestamps[timestamps.length - 1] < cutoff) {
+      tapTimestamps.delete(userId);
+    }
+  }
+}, 10 * 60 * 1000);
+
 // POST /game/tap - Process a tap
 router.post('/tap', tapRateLimit, async (req, res) => {
   try {
     // Get IP address for analytics
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || null;
+
+    // Bot detection
+    const botCheck = detectBot(req.user.id);
+
+    if (botCheck.flags.length > 0) {
+      console.log(`[SUSPICIOUS] User ${req.user.id}: ${botCheck.flags.join(', ')} (${botCheck.tapsPerMinute} taps/min)`);
+    }
+
+    // Shadow nerf: reduce XP for suspected bots
+    let shadowMultiplier = 1;
+    if (botCheck.flags.length >= 3) {
+      shadowMultiplier = 0.1; // 10% XP
+      console.log(`[SHADOW NERF] User ${req.user.id}: 10% XP (${botCheck.flags.join(', ')})`);
+      // Auto-flag in DB
+      await db.query(
+        `UPDATE users SET is_flagged = true, flag_reason = $1 WHERE id = $2 AND is_flagged = false`,
+        [`Auto-detected: ${botCheck.flags.join(', ')} (${botCheck.tapsPerMinute} taps/min)`, req.user.id]
+      );
+    } else if (botCheck.flags.length === 2) {
+      shadowMultiplier = 0.5; // 50% XP
+      console.log(`[SHADOW NERF] User ${req.user.id}: 50% XP (${botCheck.flags.join(', ')})`);
+    }
+
+    // Shadow limit: extreme tap rate returns fake success with 0 bricks
+    const SHADOW_RATE_LIMIT = (req.user.isPremium || req.user.hasBattlePass) ? 200 : 80;
+    if (botCheck.tapsPerMinute > SHADOW_RATE_LIMIT) {
+      console.log(`[SHADOW LIMIT] User ${req.user.id}: ${botCheck.tapsPerMinute} taps/min > ${SHADOW_RATE_LIMIT} limit`);
+      return res.json({
+        success: true,
+        bricks: 0,
+        bricksEarned: 0,
+        level: 0,
+        energy: 0,
+        leveledUp: false,
+        newLevel: null,
+        totalTaps: 0,
+        isLevelCapped: false,
+        isPremium: req.user.isPremium,
+        hasBattlePass: req.user.hasBattlePass,
+        boostMultiplier: 1,
+        xpProgress: { current: 0, needed: 100, percent: 0 }
+      });
+    }
 
     // Get referral bonus multiplier for Battle Pass users
     let referralBonusMultiplier = 1;
@@ -104,8 +215,9 @@ router.post('/tap', tapRateLimit, async (req, res) => {
       req.user.hasBattlePass,
       referralBonusMultiplier,
       questBonusMultiplier,
-      null, // sessionId - can be implemented later
-      ipAddress
+      null, // sessionId
+      ipAddress,
+      shadowMultiplier // Pass shadow multiplier
     );
 
     // Check if boost is still active (or Battle Pass permanent X5)

@@ -112,6 +112,36 @@ export default function UserManager({ apiCall }) {
     }
   }
 
+  const flagUser = async (userId, reason) => {
+    setActionLoading(`flag-${userId}`)
+    try {
+      await apiCall(`/api/admin/users/${userId}/flag`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      })
+      loadUsers()
+      if (expandedUser === userId) loadUserDetail(userId)
+    } catch (err) {
+      alert('Failed: ' + err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const unflagUser = async (userId) => {
+    if (!confirm('Remove flag from this user?')) return
+    setActionLoading(`unflag-${userId}`)
+    try {
+      await apiCall(`/api/admin/users/${userId}/unflag`, { method: 'POST' })
+      loadUsers()
+      if (expandedUser === userId) loadUserDetail(userId)
+    } catch (err) {
+      alert('Failed: ' + err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const truncate = (addr) => addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : 'N/A'
 
   if (error) return <div className="page-error">Error: {error}</div>
@@ -137,13 +167,13 @@ export default function UserManager({ apiCall }) {
         </form>
 
         <div className="filter-tabs">
-          {['all', 'premium', 'battlepass', 'banned'].map(f => (
+          {['all', 'premium', 'battlepass', 'flagged', 'banned'].map(f => (
             <button
               key={f}
-              className={`filter-tab ${filter === f ? 'active' : ''}`}
+              className={`filter-tab ${filter === f ? 'active' : ''} ${f === 'flagged' ? 'filter-tab-warning' : ''}`}
               onClick={() => { setFilter(f); setPagination(prev => ({ ...prev, page: 1 })); setExpandedUser(null) }}
             >
-              {f === 'all' ? 'All' : f === 'battlepass' ? 'Battle Pass' : f.charAt(0).toUpperCase() + f.slice(1)}
+              {f === 'all' ? 'All' : f === 'battlepass' ? 'Battle Pass' : f === 'flagged' ? 'Flagged' : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
@@ -171,7 +201,7 @@ export default function UserManager({ apiCall }) {
                   <>
                     <tr
                       key={user.id}
-                      className={`user-row-clickable ${expandedUser === user.id ? 'row-expanded' : ''}`}
+                      className={`user-row-clickable ${expandedUser === user.id ? 'row-expanded' : ''} ${user.is_flagged ? 'row-flagged' : ''}`}
                       onClick={() => loadUserDetail(user.id)}
                     >
                       <td>{user.id}</td>
@@ -180,10 +210,11 @@ export default function UserManager({ apiCall }) {
                       <td>{(user.bricks || 0).toLocaleString()}</td>
                       <td>{(user.total_taps || 0).toLocaleString()}</td>
                       <td>
+                        {user.is_flagged && <span className="badge badge-warning" title={user.flag_reason || 'Flagged'}>Flagged</span>}
                         {user.is_banned && <span className="badge badge-red">Banned</span>}
                         {user.has_battle_pass && <span className="badge badge-gold">BP</span>}
                         {user.is_premium && !user.has_battle_pass && <span className="badge badge-blue">Premium</span>}
-                        {!user.is_premium && !user.has_battle_pass && !user.is_banned && <span className="badge">Free</span>}
+                        {!user.is_premium && !user.has_battle_pass && !user.is_banned && !user.is_flagged && <span className="badge">Free</span>}
                       </td>
                       <td>{new Date(user.created_at).toLocaleDateString()}</td>
                     </tr>
@@ -201,8 +232,11 @@ export default function UserManager({ apiCall }) {
                               onGrantPremium={() => grantPremium(user.id)}
                               onGrantBattlePass={() => grantBattlePass(user.id)}
                               onToggleBan={() => toggleBan(user.id, userDetail.user.is_banned)}
+                              onFlagUser={(reason) => flagUser(user.id, reason)}
+                              onUnflagUser={() => unflagUser(user.id)}
                               actionLoading={actionLoading}
                               userId={user.id}
+                              apiCall={apiCall}
                             />
                           ) : null}
                         </td>
@@ -251,12 +285,48 @@ export default function UserManager({ apiCall }) {
   )
 }
 
-function UserDetail({ detail, onGrantXP, onGrantPremium, onGrantBattlePass, onToggleBan, actionLoading, userId }) {
+function UserDetail({ detail, onGrantXP, onGrantPremium, onGrantBattlePass, onToggleBan, onFlagUser, onUnflagUser, actionLoading, userId, apiCall }) {
   const { user, transactions, completedQuests, referrals, xpGrants } = detail
   const truncate = (addr) => addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : ''
+  const [auditResult, setAuditResult] = useState(null)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [flagReason, setFlagReason] = useState('')
+  const [showFlagInput, setShowFlagInput] = useState(false)
+
+  const runAudit = async () => {
+    setAuditLoading(true)
+    try {
+      const data = await apiCall('/api/admin/audit-user', {
+        method: 'POST',
+        body: JSON.stringify({ userId })
+      })
+      setAuditResult(data)
+    } catch (err) {
+      alert('Audit failed: ' + err.message)
+    } finally {
+      setAuditLoading(false)
+    }
+  }
+
+  const handleFlag = () => {
+    if (!flagReason.trim()) {
+      alert('Please enter a reason for flagging')
+      return
+    }
+    onFlagUser(flagReason.trim())
+    setShowFlagInput(false)
+    setFlagReason('')
+  }
 
   return (
     <div className="user-detail">
+      {/* Flag Alert */}
+      {user.is_flagged && (
+        <div className="flag-alert">
+          <strong>User Flagged:</strong> {user.flag_reason || 'No reason provided'}
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="user-detail-actions">
         <button className="btn btn-sm btn-primary" onClick={onGrantXP}>Grant XP</button>
@@ -281,7 +351,129 @@ function UserDetail({ detail, onGrantXP, onGrantPremium, onGrantBattlePass, onTo
         >
           {actionLoading === `ban-${userId}` ? '...' : user.is_banned ? 'Unban' : 'Ban User'}
         </button>
+        <span className="action-divider">|</span>
+        <button
+          className="btn btn-sm btn-audit"
+          onClick={runAudit}
+          disabled={auditLoading}
+        >
+          {auditLoading ? 'Auditing...' : 'Audit User'}
+        </button>
+        {user.is_flagged ? (
+          <button
+            className="btn btn-sm btn-success"
+            onClick={onUnflagUser}
+            disabled={actionLoading === `unflag-${userId}`}
+          >
+            {actionLoading === `unflag-${userId}` ? '...' : 'Clear Flag'}
+          </button>
+        ) : (
+          <button
+            className="btn btn-sm btn-warning"
+            onClick={() => setShowFlagInput(!showFlagInput)}
+          >
+            Flag User
+          </button>
+        )}
       </div>
+
+      {/* Flag Input */}
+      {showFlagInput && (
+        <div className="flag-input-bar">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Reason for flagging..."
+            value={flagReason}
+            onChange={(e) => setFlagReason(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleFlag()}
+          />
+          <button
+            className="btn btn-sm btn-warning"
+            onClick={handleFlag}
+            disabled={actionLoading === `flag-${userId}`}
+          >
+            {actionLoading === `flag-${userId}` ? '...' : 'Confirm Flag'}
+          </button>
+          <button className="btn btn-sm" onClick={() => { setShowFlagInput(false); setFlagReason('') }}>Cancel</button>
+        </div>
+      )}
+
+      {/* Audit Results */}
+      {auditResult && (
+        <div className={`audit-result ${auditResult.botScore >= 60 ? 'audit-danger' : auditResult.botScore >= 30 ? 'audit-warning' : 'audit-safe'}`}>
+          <div className="audit-header">
+            <h4>Audit Results</h4>
+            <div className="audit-score">
+              Bot Score: <strong className={auditResult.botScore >= 60 ? 'text-red' : auditResult.botScore >= 30 ? 'text-warning' : 'text-green'}>
+                {auditResult.botScore}/100
+              </strong>
+            </div>
+            <button className="btn btn-sm" onClick={() => setAuditResult(null)}>Close</button>
+          </div>
+          <div className="audit-grid">
+            <div className="audit-stat">
+              <span className="audit-label">Total Taps</span>
+              <span className="audit-value">{(auditResult.totalTaps || 0).toLocaleString()}</span>
+            </div>
+            <div className="audit-stat">
+              <span className="audit-label">Avg Taps/Hour</span>
+              <span className="audit-value">{(auditResult.tapsPerHour || 0).toLocaleString()}</span>
+            </div>
+            <div className="audit-stat">
+              <span className="audit-label">Avg Taps/Min</span>
+              <span className="audit-value">{auditResult.tapsPerMinuteAvg || '0'}</span>
+            </div>
+            <div className="audit-stat">
+              <span className="audit-label">Level</span>
+              <span className="audit-value">{auditResult.level || 1}</span>
+            </div>
+            <div className="audit-stat">
+              <span className="audit-label">Bricks</span>
+              <span className="audit-value">{(auditResult.bricks || 0).toLocaleString()}</span>
+            </div>
+            <div className="audit-stat">
+              <span className="audit-label">Account Age</span>
+              <span className="audit-value">{auditResult.hoursSinceRegistration ? `${auditResult.hoursSinceRegistration}h` : 'N/A'}</span>
+            </div>
+          </div>
+          {auditResult.suspiciousPatterns && auditResult.suspiciousPatterns.length > 0 && (
+            <div className="audit-patterns">
+              <h5>Suspicious Patterns</h5>
+              <ul>
+                {auditResult.suspiciousPatterns.map((p, i) => (
+                  <li key={i} className="text-warning">{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {auditResult.tapDistribution && auditResult.tapDistribution.length > 0 && (
+            <div className="audit-distribution">
+              <h5>Tap Distribution (Last 24h by Hour)</h5>
+              <div className="distribution-bars">
+                {auditResult.tapDistribution.map((entry, i) => {
+                  const maxCount = Math.max(...auditResult.tapDistribution.map(e => e.count), 1)
+                  const hourLabel = new Date(entry.hour).getHours()
+                  return (
+                    <div key={i} className="distribution-bar-wrapper" title={`${hourLabel}:00 - ${entry.count} taps`}>
+                      <div
+                        className="distribution-bar"
+                        style={{ height: `${(entry.count / maxCount) * 100}%` }}
+                      />
+                      <span className="distribution-label">{hourLabel}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {auditResult.isFlagged && (
+            <div className="audit-flag-notice">
+              Currently flagged: {auditResult.flagReason}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Info Grid */}
       <div className="user-detail-grid">
@@ -305,6 +497,8 @@ function UserDetail({ detail, onGrantXP, onGrantPremium, onGrantBattlePass, onTo
             <div><span>Battle Pass</span><span className={user.has_battle_pass ? 'text-accent' : ''}>{user.has_battle_pass ? 'Yes' : 'No'}</span></div>
             {user.battle_pass_expires_at && <div><span>BP Expires</span><span>{new Date(user.battle_pass_expires_at).toLocaleDateString()}</span></div>}
             <div><span>Banned</span><span className={user.is_banned ? 'text-red' : ''}>{user.is_banned ? 'YES' : 'No'}</span></div>
+            <div><span>Flagged</span><span className={user.is_flagged ? 'text-warning' : ''}>{user.is_flagged ? 'YES' : 'No'}</span></div>
+            {user.flag_reason && <div><span>Flag Reason</span><span className="text-warning">{user.flag_reason}</span></div>}
             <div><span>Boost</span><span>{user.boost_multiplier > 1 ? `x${user.boost_multiplier}` : 'None'}</span></div>
             {user.quest_bonus_multiplier > 1 && <div><span>Quest Bonus</span><span className="text-green">+{Math.round((user.quest_bonus_multiplier - 1) * 100)}%</span></div>}
             <div><span>Referral Code</span><span className="font-mono">{user.referral_code || 'N/A'}</span></div>
