@@ -3893,6 +3893,8 @@ const PyramidMemeEmpireV5 = () => {
           gap: 8px;
           margin-bottom: 12px;
           flex-shrink: 0;
+          position: relative;
+          z-index: 100;
         }
 
         .stat-box {
@@ -4035,6 +4037,8 @@ const PyramidMemeEmpireV5 = () => {
           padding: 10px;
           margin-bottom: 12px;
           flex-shrink: 0;
+          position: relative;
+          z-index: 50;
         }
 
         .energy-info {
@@ -4086,7 +4090,7 @@ const PyramidMemeEmpireV5 = () => {
         }
 
         .tap-area-full {
-          flex: 1;
+          flex: 1 1 auto;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -4095,7 +4099,8 @@ const PyramidMemeEmpireV5 = () => {
           touch-action: manipulation;
           -webkit-user-select: none;
           user-select: none;
-          min-height: 0;
+          min-height: 200px;
+          overflow: hidden;
         }
 
         .pyramid-container {
@@ -4104,6 +4109,13 @@ const PyramidMemeEmpireV5 = () => {
           -webkit-user-select: none;
           user-select: none;
           -webkit-touch-callout: none;
+          position: relative;
+          z-index: 10;
+          max-height: 60vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
         }
 
         .pyramid-pulse {
@@ -5549,6 +5561,85 @@ const PyramidMemeEmpireV5 = () => {
           }
         }
 
+        @media (max-height: 700px) {
+          .pyramid-grid {
+            grid-template-columns: repeat(9, 26px);
+            grid-template-rows: repeat(5, 40px);
+            gap: 3px;
+          }
+
+          .pyramid-moai {
+            font-size: 32px;
+          }
+
+          .stat-box {
+            padding: 8px 4px;
+          }
+
+          .stat-emoji {
+            font-size: 20px;
+            margin-bottom: 4px;
+          }
+
+          .stat-label {
+            font-size: 5px;
+          }
+
+          .stat-value {
+            font-size: 14px;
+          }
+
+          .pyramid-container {
+            max-height: 50vh;
+          }
+
+          .level-badge {
+            margin-top: 10px;
+            padding: 6px 16px;
+            font-size: 11px;
+          }
+        }
+
+        @media (max-height: 600px) {
+          .pyramid-grid {
+            grid-template-columns: repeat(9, 22px);
+            grid-template-rows: repeat(5, 34px);
+            gap: 2px;
+          }
+
+          .pyramid-moai {
+            font-size: 26px;
+          }
+
+          .stat-box {
+            padding: 6px 4px;
+          }
+
+          .stat-emoji {
+            font-size: 18px;
+            margin-bottom: 2px;
+          }
+
+          .stat-value {
+            font-size: 12px;
+          }
+
+          .pyramid-container {
+            max-height: 45vh;
+          }
+
+          .energy-bar-container {
+            padding: 6px;
+            margin-bottom: 6px;
+          }
+
+          .level-badge {
+            margin-top: 6px;
+            padding: 4px 12px;
+            font-size: 10px;
+          }
+        }
+
         @media (orientation: landscape) and (max-height: 600px) {
           .stats-simple {
             gap: 6px;
@@ -5573,12 +5664,13 @@ const PyramidMemeEmpireV5 = () => {
           }
 
           .pyramid-grid {
-            grid-template-columns: repeat(9, 26px);
-            grid-template-rows: repeat(5, 38px);
+            grid-template-columns: repeat(9, 22px);
+            grid-template-rows: repeat(5, 32px);
+            gap: 2px;
           }
 
           .pyramid-moai {
-            font-size: 30px;
+            font-size: 26px;
           }
 
           .level-badge {
