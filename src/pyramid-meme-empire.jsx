@@ -1175,6 +1175,8 @@ const PyramidMemeEmpireV5 = () => {
   }, []);
 
   // ========== USDC PAYMENT FUNCTION ==========
+  // Uses raw eth_sendTransaction WITHOUT gas field for universal wallet compatibility.
+  // Phantom rejects transactions with explicit gas; this lets the wallet estimate gas itself.
   const purchaseItem = async (itemType) => {
     try {
       // 1. Check wallet is connected
@@ -1216,8 +1218,8 @@ const PyramidMemeEmpireV5 = () => {
       }
 
       // 3. Check USDC balance
-      const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, signer);
-      const balance = await usdcContract.balanceOf(userAddress);
+      const usdcRead = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
+      const balance = await usdcRead.balanceOf(userAddress);
       const price = USDC_PRICES[itemType];
 
       if (balance < price) {
@@ -1225,26 +1227,39 @@ const PyramidMemeEmpireV5 = () => {
         throw new Error(`Insufficient USDC balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
       }
 
-      // 4. Send USDC transfer (NO overrides - let wallet handle gas estimation)
-      setPurchaseStatus('signing');
-      const tx = await usdcContract.transfer(SHOP_WALLET, price);
+      // 4. Encode transfer calldata manually
+      const iface = new ethers.Interface(['function transfer(address to, uint256 amount) returns (bool)']);
+      const data = iface.encodeFunctionData('transfer', [SHOP_WALLET, price]);
 
-      // 5. Wait for confirmations
+      // 5. Send raw transaction — only from, to, data — NO gas fields
+      setPurchaseStatus('signing');
+      const txHash = await walletProvider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: userAddress,
+          to: USDC_ADDRESS,
+          data: data
+        }]
+      });
+
+      console.log('[Purchase] Transaction sent:', txHash);
+
+      // 6. Wait for confirmations (2 blocks)
       setPurchaseStatus('confirming');
-      const receipt = await tx.wait(2);
+      const receipt = await provider.waitForTransaction(txHash, 2);
 
       if (receipt.status !== 1) {
         throw new Error('Transaction failed on-chain');
       }
 
-      // 6. Send txHash to backend for verification
+      // 7. Send txHash to backend for verification
       setPurchaseStatus('verifying');
       const result = await apiCall('/api/shop/purchase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemId: itemType,
-          txHash: tx.hash
+          txHash: txHash
         })
       });
 
@@ -1252,7 +1267,7 @@ const PyramidMemeEmpireV5 = () => {
 
       return {
         success: true,
-        txHash: tx.hash,
+        txHash: txHash,
         ...result
       };
 
@@ -1261,7 +1276,7 @@ const PyramidMemeEmpireV5 = () => {
       setPurchaseStatus('error');
 
       // Handle user rejection
-      if (error.code === 'ACTION_REJECTED' || error.code === 4001 || error.message?.includes('user rejected')) {
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001 || error.message?.includes('user rejected') || error.message?.includes('denied')) {
         return { success: false, error: 'Transaction cancelled by user' };
       }
 
@@ -1275,7 +1290,7 @@ const PyramidMemeEmpireV5 = () => {
         return { success: false, error: error.message };
       }
 
-      return { success: false, error: 'Transaction failed. Please try again.' };
+      return { success: false, error: 'Purchase failed. Please try again.' };
     }
   };
 
