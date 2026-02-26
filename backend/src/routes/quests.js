@@ -244,8 +244,8 @@ router.post('/complete', async (req, res) => {
         console.log(`[Quests] KiiChain bonus applied: +20% for 30 days`);
       }
 
-      // Complete the quest (pass isPremium for level cap check)
-      const completion = await Quest.complete(req.user.id, questId, quest.xp_reward, req.user.isPremium);
+      // Complete the quest (pass isPremium + hasBattlePass for level cap check)
+      const completion = await Quest.complete(req.user.id, questId, quest.xp_reward, req.user.isPremium, req.user.hasBattlePass);
 
       if (!completion) {
         return res.status(400).json({ error: 'Failed to complete quest' });
@@ -311,7 +311,7 @@ router.post('/verify-external',
           });
         }
 
-        const completion = await Quest.complete(req.user.id, questId, quest.xp_reward);
+        const completion = await Quest.complete(req.user.id, questId, quest.xp_reward, req.user.isPremium, req.user.hasBattlePass);
         return res.json({
           verified: true,
           xpEarned: quest.xp_reward,

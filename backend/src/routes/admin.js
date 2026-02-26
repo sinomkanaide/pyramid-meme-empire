@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { adminAuth, generateAdminToken } = require('../middleware/auth');
 const db = require('../config/database');
-const { calculateLevelFromXp, getXpProgress } = require('../models/GameProgress');
+const { calculateLevelFromXp, getXpProgress, applyLevelCap } = require('../models/GameProgress');
 
 const router = express.Router();
 
@@ -875,9 +875,12 @@ router.post('/users/:id/grant-xp', async (req, res) => {
       return res.status(400).json({ error: 'Reason is required' });
     }
 
-    // Get current progress
+    // Get current progress + user info for level cap
     const progressResult = await db.query(
-      'SELECT bricks, level FROM game_progress WHERE user_id = $1',
+      `SELECT gp.bricks, gp.level, u.is_premium, u.has_battle_pass
+       FROM game_progress gp
+       JOIN users u ON u.id = gp.user_id
+       WHERE gp.user_id = $1`,
       [userId]
     );
 
@@ -885,9 +888,11 @@ router.post('/users/:id/grant-xp', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const currentBricks = progressResult.rows[0].bricks;
+    const row = progressResult.rows[0];
+    const currentBricks = row.bricks;
     const newBricks = currentBricks + parseInt(amount);
-    const newLevel = calculateLevelFromXp(newBricks);
+    const calculatedLevel = calculateLevelFromXp(newBricks);
+    const newLevel = applyLevelCap(calculatedLevel, row.is_premium, row.has_battle_pass);
     const xpProgress = getXpProgress(newBricks, newLevel);
 
     // Update game_progress
@@ -1181,6 +1186,64 @@ router.put('/leaderboard/prizes', async (req, res) => {
   } catch (error) {
     console.error('Admin update prizes error:', error);
     res.status(500).json({ error: 'Failed to update prizes' });
+  }
+});
+
+// ============================================================================
+// RECALCULATE ALL USER LEVELS
+// ============================================================================
+
+// POST /admin/recalculate-levels - Fix all users with incorrect levels
+router.post('/recalculate-levels', async (req, res) => {
+  try {
+    console.log('[Admin] Recalculating all user levels...');
+
+    const result = await db.query(`
+      SELECT gp.user_id, gp.bricks, gp.level as current_level,
+             u.is_premium, u.has_battle_pass
+      FROM game_progress gp
+      JOIN users u ON u.id = gp.user_id
+      ORDER BY gp.user_id
+    `);
+
+    let fixed = 0;
+    const total = result.rows.length;
+    const fixes = [];
+
+    for (const user of result.rows) {
+      const totalXp = parseInt(user.bricks) || 0;
+      const calculatedLevel = calculateLevelFromXp(totalXp);
+      const correctLevel = applyLevelCap(calculatedLevel, user.is_premium, user.has_battle_pass);
+
+      if (correctLevel !== user.current_level) {
+        await db.query(
+          'UPDATE game_progress SET level = $1 WHERE user_id = $2',
+          [correctLevel, user.user_id]
+        );
+        fixes.push({
+          userId: user.user_id,
+          bricks: totalXp,
+          oldLevel: user.current_level,
+          newLevel: correctLevel,
+          isPremium: user.is_premium,
+          hasBattlePass: user.has_battle_pass
+        });
+        console.log(`[Recalc] User ${user.user_id}: Level ${user.current_level} → ${correctLevel} (${totalXp} bricks)`);
+        fixed++;
+      }
+    }
+
+    console.log(`[Admin] Recalculation complete: ${fixed}/${total} users fixed`);
+
+    res.json({
+      success: true,
+      total,
+      fixed,
+      fixes
+    });
+  } catch (error) {
+    console.error('[Admin] Recalculate levels error:', error);
+    res.status(500).json({ error: 'Failed to recalculate levels' });
   }
 });
 

@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { calculateLevelFromXp } = require('./GameProgress');
+const { calculateLevelFromXp, applyLevelCap } = require('./GameProgress');
 
 // Default XP rewards (used when reward_amount is null in DB)
 const XP_REWARDS = {
@@ -202,7 +202,7 @@ class Quest {
   }
 
   // Complete a quest for user
-  static async complete(userId, questId, xpEarned, isPremium = false) {
+  static async complete(userId, questId, xpEarned, isPremium = false, hasBattlePass = false) {
     try {
       const xp = parseInt(xpEarned) || 0;
 
@@ -228,9 +228,7 @@ class Quest {
       if (updated.rows.length > 0) {
         const newBricks = parseInt(updated.rows[0].bricks) || 0;
         const calculatedLevel = calculateLevelFromXp(newBricks);
-        const FREE_USER_MAX_LEVEL = 3;
-        const newLevel = (!isPremium && calculatedLevel > FREE_USER_MAX_LEVEL)
-          ? FREE_USER_MAX_LEVEL : calculatedLevel;
+        const newLevel = applyLevelCap(calculatedLevel, isPremium, hasBattlePass);
         await db.query(
           'UPDATE game_progress SET level = $1 WHERE user_id = $2',
           [newLevel, userId]

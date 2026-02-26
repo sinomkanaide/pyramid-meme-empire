@@ -2,7 +2,7 @@ const express = require('express');
 const { authenticateToken, tapRateLimit } = require('../middleware/auth');
 const User = require('../models/User');
 const GameProgress = require('../models/GameProgress');
-const { getXpProgress, calculateLevelFromXp } = require('../models/GameProgress');
+const { getXpProgress, calculateLevelFromXp, applyLevelCap, FREE_USER_MAX_LEVEL } = require('../models/GameProgress');
 const db = require('../config/database');
 
 const router = express.Router();
@@ -20,18 +20,15 @@ router.get('/progress', async (req, res) => {
       return res.status(404).json({ error: 'Game progress not found' });
     }
 
-    const FREE_USER_MAX_LEVEL = 3;
-
     // Auto-heal: recalculate level from bricks if out of sync
     const calculatedLevel = calculateLevelFromXp(parseInt(progress.bricks) || 0);
-    const correctLevel = (!req.user.isPremium && calculatedLevel > FREE_USER_MAX_LEVEL)
-      ? FREE_USER_MAX_LEVEL : calculatedLevel;
+    const correctLevel = applyLevelCap(calculatedLevel, req.user.isPremium, req.user.hasBattlePass);
     if (correctLevel !== progress.level) {
       await db.query('UPDATE game_progress SET level = $1 WHERE user_id = $2', [correctLevel, req.user.id]);
       progress.level = correctLevel;
     }
 
-    const isLevelCapped = !req.user.isPremium && progress.level >= FREE_USER_MAX_LEVEL;
+    const isLevelCapped = !req.user.isPremium && !req.user.hasBattlePass && progress.level >= FREE_USER_MAX_LEVEL;
 
     // Check if boost is active
     const now = new Date();
