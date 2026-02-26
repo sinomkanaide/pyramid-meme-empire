@@ -19,6 +19,8 @@ export default function LeaderboardManager({ apiCall }) {
   const [selectedSeason, setSelectedSeason] = useState('')
   const [activeSeason, setActiveSeason] = useState(null)
   const [showCreateSeason, setShowCreateSeason] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcResult, setRecalcResult] = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -131,6 +133,23 @@ export default function LeaderboardManager({ apiCall }) {
     }
   }
 
+  const recalculateLevels = async () => {
+    if (!confirm('Recalculate ALL user levels based on their XP? This will fix any stuck levels.')) return
+    setRecalculating(true)
+    setRecalcResult(null)
+    try {
+      const data = await apiCall('/api/admin/recalculate-levels', { method: 'POST' })
+      setRecalcResult(data)
+      if (data.fixed > 0) {
+        loadData()
+      }
+    } catch (err) {
+      alert('Failed: ' + err.message)
+    } finally {
+      setRecalculating(false)
+    }
+  }
+
   const calculateTotal = (prizeList) => {
     return prizeList.reduce((sum, p) => {
       const range = (p.position_to || 0) - (p.position_from || 0) + 1
@@ -147,9 +166,42 @@ export default function LeaderboardManager({ apiCall }) {
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">Leaderboard</h1>
-        <span className="page-subtitle" style={{ margin: 0 }}>{players.length} players</span>
+        <div>
+          <h1 className="page-title">Leaderboard</h1>
+          <span className="page-subtitle" style={{ margin: 0 }}>{players.length} players</span>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={recalculateLevels}
+          disabled={recalculating}
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {recalculating ? 'Recalculating...' : 'Recalculate All Levels'}
+        </button>
       </div>
+
+      {recalcResult && (
+        <div className="card" style={{ marginTop: 12, padding: '12px 16px', background: recalcResult.fixed > 0 ? 'rgba(0,255,136,0.08)' : 'rgba(139,92,246,0.08)', border: recalcResult.fixed > 0 ? '1px solid rgba(0,255,136,0.3)' : '1px solid rgba(139,92,246,0.15)' }}>
+          <div style={{ fontSize: 13, fontWeight: 'bold', marginBottom: recalcResult.fixed > 0 ? 8 : 0 }}>
+            {recalcResult.fixed > 0
+              ? `Fixed ${recalcResult.fixed} of ${recalcResult.total} users`
+              : `All ${recalcResult.total} users have correct levels`
+            }
+          </div>
+          {recalcResult.fixes && recalcResult.fixes.length > 0 && (
+            <div style={{ fontSize: 11, maxHeight: 150, overflowY: 'auto' }}>
+              {recalcResult.fixes.map((f, i) => (
+                <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  User #{f.userId}: Level {f.oldLevel} → <strong className="text-green">{f.newLevel}</strong> ({f.bricks.toLocaleString()} XP)
+                  {f.hasBattlePass && <span className="badge badge-gold" style={{ marginLeft: 6, fontSize: 9 }}>BP</span>}
+                  {f.isPremium && <span className="badge badge-blue" style={{ marginLeft: 6, fontSize: 9 }}>Premium</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="btn btn-sm" onClick={() => setRecalcResult(null)} style={{ marginTop: 8, fontSize: 10 }}>Dismiss</button>
+        </div>
+      )}
 
       {/* Season Selector */}
       <div className="card" style={{ marginTop: 16 }}>
