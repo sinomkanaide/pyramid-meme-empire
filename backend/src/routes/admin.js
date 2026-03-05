@@ -140,75 +140,126 @@ router.use(adminAuth);
 
 // GET /admin/analytics/overview
 router.get('/analytics/overview', async (req, res) => {
-  try {
-    // Total users
-    const totalUsersResult = await db.query('SELECT COUNT(*) as count FROM users');
-    const totalUsers = parseInt(totalUsersResult.rows[0].count);
+  const errors = [];
 
-    // New users today / 7d / 30d
-    const newUsersResult = await db.query(`
+  // 1. Total users
+  let totalUsers = 0;
+  try {
+    const result = await db.query('SELECT COUNT(*) as count FROM users');
+    totalUsers = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Analytics:Overview] Total users query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'totalUsers', error: err.message });
+  }
+
+  // 2. New users today / 7d / 30d
+  let newUsers = { today: 0, week: 0, month: 0 };
+  try {
+    const result = await db.query(`
       SELECT
         COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today,
         COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as week,
         COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '30 days') as month
       FROM users
     `);
-    const newUsers = {
-      today: parseInt(newUsersResult.rows[0].today),
-      week: parseInt(newUsersResult.rows[0].week),
-      month: parseInt(newUsersResult.rows[0].month)
+    newUsers = {
+      today: parseInt(result.rows[0].today),
+      week: parseInt(result.rows[0].week),
+      month: parseInt(result.rows[0].month)
     };
+  } catch (err) {
+    console.error('[Analytics:Overview] New users query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'newUsers', error: err.message });
+  }
 
-    // Active users today (at least 1 tap today)
-    const activeResult = await db.query(`
+  // 3. Active users today
+  let activeToday = 0;
+  try {
+    const result = await db.query(`
       SELECT COUNT(DISTINCT user_id) as count
       FROM taps
       WHERE tapped_at >= CURRENT_DATE
     `);
-    const activeToday = parseInt(activeResult.rows[0].count);
+    activeToday = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Analytics:Overview] Active today query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'activeToday', error: err.message });
+  }
 
-    // Premium users
-    const premiumResult = await db.query(`
+  // 4. Premium users
+  let totalPremium = 0;
+  try {
+    const result = await db.query(`
       SELECT COUNT(*) as count FROM users
       WHERE is_premium = true AND (premium_expires_at IS NULL OR premium_expires_at > NOW())
     `);
-    const totalPremium = parseInt(premiumResult.rows[0].count);
+    totalPremium = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Analytics:Overview] Premium users query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'totalPremium', error: err.message });
+  }
 
-    // Battle Pass users
-    const bpResult = await db.query(`
+  // 5. Battle Pass users
+  let totalBattlePass = 0;
+  try {
+    const result = await db.query(`
       SELECT COUNT(*) as count FROM users
       WHERE has_battle_pass = true AND (battle_pass_expires_at IS NULL OR battle_pass_expires_at > NOW())
     `);
-    const totalBattlePass = parseInt(bpResult.rows[0].count);
+    totalBattlePass = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Analytics:Overview] Battle pass query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'totalBattlePass', error: err.message });
+  }
 
-    // Total completed transactions
-    const txResult = await db.query(`
+  // 6. Total completed transactions
+  let totalTransactions = 0;
+  try {
+    const result = await db.query(`
       SELECT COUNT(*) as count FROM transactions WHERE status = 'confirmed'
     `);
-    const totalTransactions = parseInt(txResult.rows[0].count);
+    totalTransactions = parseInt(result.rows[0].count);
+  } catch (err) {
+    console.error('[Analytics:Overview] Total transactions query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'totalTransactions', error: err.message });
+  }
 
-    // Revenue total
-    const revenueResult = await db.query(`
+  // 7. Revenue total
+  let revenueTotal = 0;
+  try {
+    const result = await db.query(`
       SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = 'confirmed'
     `);
-    const revenueTotal = parseFloat(revenueResult.rows[0].total);
+    revenueTotal = parseFloat(result.rows[0].total);
+  } catch (err) {
+    console.error('[Analytics:Overview] Revenue total query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'revenueTotal', error: err.message });
+  }
 
-    // Revenue by item
-    const revenueByItemResult = await db.query(`
+  // 8. Revenue by item
+  let revenueByItem = [];
+  try {
+    const result = await db.query(`
       SELECT type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
       FROM transactions
       WHERE status = 'confirmed'
       GROUP BY type
       ORDER BY revenue DESC
     `);
-    const revenueByItem = revenueByItemResult.rows.map(r => ({
+    revenueByItem = result.rows.map(r => ({
       item: r.type,
       revenue: parseFloat(r.revenue),
       count: parseInt(r.count)
     }));
+  } catch (err) {
+    console.error('[Analytics:Overview] Revenue by item query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'revenueByItem', error: err.message });
+  }
 
-    // Revenue today / 7d / 30d
-    const revenuePeriodResult = await db.query(`
+  // 9. Revenue today / 7d / 30d
+  let revenuePeriod = { today: 0, week: 0, month: 0 };
+  try {
+    const result = await db.query(`
       SELECT
         COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE), 0) as today,
         COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) as week,
@@ -216,27 +267,35 @@ router.get('/analytics/overview', async (req, res) => {
       FROM transactions
       WHERE status = 'confirmed'
     `);
-    const revenuePeriod = {
-      today: parseFloat(revenuePeriodResult.rows[0].today),
-      week: parseFloat(revenuePeriodResult.rows[0].week),
-      month: parseFloat(revenuePeriodResult.rows[0].month)
+    revenuePeriod = {
+      today: parseFloat(result.rows[0].today),
+      week: parseFloat(result.rows[0].week),
+      month: parseFloat(result.rows[0].month)
     };
-
-    res.json({
-      totalUsers,
-      newUsers,
-      activeToday,
-      totalPremium,
-      totalBattlePass,
-      totalTransactions,
-      revenueTotal,
-      revenueByItem,
-      revenuePeriod
-    });
-  } catch (error) {
-    console.error('Admin analytics overview error:', error);
-    res.status(500).json({ error: 'Failed to get analytics overview' });
+  } catch (err) {
+    console.error('[Analytics:Overview] Revenue period query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'revenuePeriod', error: err.message });
   }
+
+  // Return partial data even if some queries failed
+  const response = {
+    totalUsers,
+    newUsers,
+    activeToday,
+    totalPremium,
+    totalBattlePass,
+    totalTransactions,
+    revenueTotal,
+    revenueByItem,
+    revenuePeriod
+  };
+
+  if (errors.length > 0) {
+    console.error('[Analytics:Overview] Partial failures:', JSON.stringify(errors));
+    response._errors = errors;
+  }
+
+  res.json(response);
 });
 
 // ============================================================================
@@ -245,27 +304,50 @@ router.get('/analytics/overview', async (req, res) => {
 
 // GET /admin/analytics/users
 router.get('/analytics/users', async (req, res) => {
+  const errors = [];
+
+  // 1. New registrations per day (last 30 days)
+  let registrationsByDay = [];
   try {
-    // New registrations per day (last 30 days)
-    const registrationsResult = await db.query(`
+    const result = await db.query(`
       SELECT DATE(created_at) as date, COUNT(*) as count
       FROM users
       WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE(created_at)
       ORDER BY date ASC
     `);
+    registrationsByDay = result.rows.map(r => ({
+      date: r.date,
+      count: parseInt(r.count)
+    }));
+  } catch (err) {
+    console.error('[Analytics:Users] Registrations query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'registrationsByDay', error: err.message });
+  }
 
-    // Active users per day (last 30 days)
-    const activeByDayResult = await db.query(`
+  // 2. Active users per day (last 30 days)
+  let activeByDay = [];
+  try {
+    const result = await db.query(`
       SELECT DATE(tapped_at) as date, COUNT(DISTINCT user_id) as count
       FROM taps
       WHERE tapped_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE(tapped_at)
       ORDER BY date ASC
     `);
+    activeByDay = result.rows.map(r => ({
+      date: r.date,
+      count: parseInt(r.count)
+    }));
+  } catch (err) {
+    console.error('[Analytics:Users] Active by day query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'activeByDay', error: err.message });
+  }
 
-    // Retention: % of users who come back the next day
-    const retentionResult = await db.query(`
+  // 3. Retention: % of users who come back the next day
+  let retentionRate = 0;
+  try {
+    const result = await db.query(`
       WITH day_users AS (
         SELECT DISTINCT user_id, DATE(tapped_at) as active_date
         FROM taps
@@ -283,41 +365,50 @@ router.get('/analytics/users', async (req, res) => {
       WHERE d1.active_date >= CURRENT_DATE - INTERVAL '14 days'
         AND d1.active_date < CURRENT_DATE
     `);
-    const retentionRate = parseFloat(retentionResult.rows[0]?.retention_rate || 0);
+    retentionRate = parseFloat(result.rows[0]?.retention_rate || 0);
+  } catch (err) {
+    console.error('[Analytics:Users] Retention query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'retentionRate', error: err.message });
+  }
 
-    // Conversion rates
-    const conversionResult = await db.query(`
+  // 4. Conversion rates
+  let conversionRates = { freeToPremium: 0, premiumToBattlePass: 0 };
+  try {
+    const result = await db.query(`
       SELECT
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE is_premium = true) as premium,
         COUNT(*) FILTER (WHERE has_battle_pass = true) as battle_pass
       FROM users
     `);
-    const total = parseInt(conversionResult.rows[0].total) || 1;
-    const premiumCount = parseInt(conversionResult.rows[0].premium);
-    const bpCount = parseInt(conversionResult.rows[0].battle_pass);
-
-    res.json({
-      registrationsByDay: registrationsResult.rows.map(r => ({
-        date: r.date,
-        count: parseInt(r.count)
-      })),
-      activeByDay: activeByDayResult.rows.map(r => ({
-        date: r.date,
-        count: parseInt(r.count)
-      })),
-      retentionRate,
-      conversionRates: {
-        freeToPremium: Math.round((premiumCount / total) * 1000) / 10,
-        premiumToBattlePass: premiumCount > 0
-          ? Math.round((bpCount / premiumCount) * 1000) / 10
-          : 0
-      }
-    });
-  } catch (error) {
-    console.error('Admin analytics users error:', error);
-    res.status(500).json({ error: 'Failed to get user analytics' });
+    const total = parseInt(result.rows[0].total) || 1;
+    const premiumCount = parseInt(result.rows[0].premium);
+    const bpCount = parseInt(result.rows[0].battle_pass);
+    conversionRates = {
+      freeToPremium: Math.round((premiumCount / total) * 1000) / 10,
+      premiumToBattlePass: premiumCount > 0
+        ? Math.round((bpCount / premiumCount) * 1000) / 10
+        : 0
+    };
+  } catch (err) {
+    console.error('[Analytics:Users] Conversion rates query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'conversionRates', error: err.message });
   }
+
+  // Return partial data even if some queries failed
+  const response = {
+    registrationsByDay,
+    activeByDay,
+    retentionRate,
+    conversionRates
+  };
+
+  if (errors.length > 0) {
+    console.error('[Analytics:Users] Partial failures:', JSON.stringify(errors));
+    response._errors = errors;
+  }
+
+  res.json(response);
 });
 
 // ============================================================================
@@ -326,63 +417,94 @@ router.get('/analytics/users', async (req, res) => {
 
 // GET /admin/analytics/revenue
 router.get('/analytics/revenue', async (req, res) => {
+  const errors = [];
+
+  // 1. Revenue per day (last 30 days)
+  let revenueByDay = [];
   try {
-    // Revenue per day (last 30 days)
-    const revenueByDayResult = await db.query(`
+    const result = await db.query(`
       SELECT DATE(created_at) as date, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as tx_count
       FROM transactions
       WHERE status = 'confirmed' AND created_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE(created_at)
       ORDER BY date ASC
     `);
+    revenueByDay = result.rows.map(r => ({
+      date: r.date,
+      revenue: parseFloat(r.revenue),
+      transactions: parseInt(r.tx_count)
+    }));
+  } catch (err) {
+    console.error('[Analytics:Revenue] Revenue by day query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'revenueByDay', error: err.message });
+  }
 
-    // Revenue by item (for pie chart)
-    const revenueByItemResult = await db.query(`
+  // 2. Revenue by item (for pie chart)
+  let revenueByItem = [];
+  try {
+    const result = await db.query(`
       SELECT type, COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count
       FROM transactions
       WHERE status = 'confirmed'
       GROUP BY type
       ORDER BY revenue DESC
     `);
+    revenueByItem = result.rows.map(r => ({
+      item: r.type,
+      revenue: parseFloat(r.revenue),
+      count: parseInt(r.count)
+    }));
+  } catch (err) {
+    console.error('[Analytics:Revenue] Revenue by item query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'revenueByItem', error: err.message });
+  }
 
-    // ARPU
-    const arpuResult = await db.query(`
+  // 3. ARPU
+  let arpu = 0;
+  try {
+    const result = await db.query(`
       SELECT
         COALESCE(SUM(t.amount), 0) as total_revenue,
         (SELECT COUNT(*) FROM users) as total_users
       FROM transactions t
       WHERE t.status = 'confirmed'
     `);
-    const totalRevenue = parseFloat(arpuResult.rows[0].total_revenue);
-    const totalUsers = parseInt(arpuResult.rows[0].total_users) || 1;
-    const arpu = Math.round((totalRevenue / totalUsers) * 100) / 100;
+    const totalRevenue = parseFloat(result.rows[0].total_revenue);
+    const totalUsers = parseInt(result.rows[0].total_users) || 1;
+    arpu = Math.round((totalRevenue / totalUsers) * 100) / 100;
+  } catch (err) {
+    console.error('[Analytics:Revenue] ARPU query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'arpu', error: err.message });
+  }
 
-    // Average transaction amount
-    const avgTxResult = await db.query(`
+  // 4. Average transaction amount
+  let avgTransaction = 0;
+  try {
+    const result = await db.query(`
       SELECT COALESCE(AVG(amount), 0) as avg_amount
       FROM transactions
       WHERE status = 'confirmed'
     `);
-    const avgTransaction = Math.round(parseFloat(avgTxResult.rows[0].avg_amount) * 100) / 100;
-
-    res.json({
-      revenueByDay: revenueByDayResult.rows.map(r => ({
-        date: r.date,
-        revenue: parseFloat(r.revenue),
-        transactions: parseInt(r.tx_count)
-      })),
-      revenueByItem: revenueByItemResult.rows.map(r => ({
-        item: r.type,
-        revenue: parseFloat(r.revenue),
-        count: parseInt(r.count)
-      })),
-      arpu,
-      avgTransaction
-    });
-  } catch (error) {
-    console.error('Admin analytics revenue error:', error);
-    res.status(500).json({ error: 'Failed to get revenue analytics' });
+    avgTransaction = Math.round(parseFloat(result.rows[0].avg_amount) * 100) / 100;
+  } catch (err) {
+    console.error('[Analytics:Revenue] Avg transaction query failed:', err.message, '\nStack:', err.stack);
+    errors.push({ metric: 'avgTransaction', error: err.message });
   }
+
+  // Return partial data even if some queries failed
+  const response = {
+    revenueByDay,
+    revenueByItem,
+    arpu,
+    avgTransaction
+  };
+
+  if (errors.length > 0) {
+    console.error('[Analytics:Revenue] Partial failures:', JSON.stringify(errors));
+    response._errors = errors;
+  }
+
+  res.json(response);
 });
 
 // ============================================================================
