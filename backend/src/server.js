@@ -155,6 +155,10 @@ const runMigrations = async () => {
     `UPDATE quests SET reward_amount = 200 WHERE requirement_type = 'tap_count' AND requirement_value = 100`,
     // Fix Stack 1000 Bricks: 1000 XP
     `UPDATE quests SET reward_amount = 1000 WHERE requirement_type = 'tap_count' AND requirement_value = 1000`,
+    // MetaSpace Partnership quest
+    `INSERT INTO quests (title, description, icon, quest_type, requirement_type, requirement_value, requirement_metadata, reward_type, is_reward_hidden, sort_order)
+     SELECT 'MetaSpace Partnership', 'Open a Discord ticket to claim your 1 GIGA ticket reward', '🎫', 'partner', 'discord_ticket', 1, '{"url": ""}', 'pme', TRUE, 10
+     WHERE NOT EXISTS (SELECT 1 FROM quests WHERE title = 'MetaSpace Partnership')`,
   ];
 
   for (const sql of migrations) {
@@ -164,6 +168,29 @@ const runMigrations = async () => {
       console.log('[Migration] Skipped:', err.message);
     }
   }
+
+  // Seed 18 completions for MetaSpace Partnership quest (already completed externally via Discord tickets)
+  try {
+    const questRow = await db.query(`SELECT id FROM quests WHERE title = 'MetaSpace Partnership' LIMIT 1`);
+    if (questRow.rows.length > 0) {
+      const questId = questRow.rows[0].id;
+      const existing = await db.query(`SELECT COUNT(*) as count FROM quest_completions WHERE quest_id = $1`, [String(questId)]);
+      if (parseInt(existing.rows[0].count) < 18) {
+        await db.query(`
+          INSERT INTO quest_completions (user_id, quest_id, xp_earned, is_verified)
+          SELECT u.id, $1, 0, true
+          FROM users u
+          WHERE u.id NOT IN (SELECT user_id FROM quest_completions WHERE quest_id = $1)
+          ORDER BY u.id ASC
+          LIMIT $2
+        `, [String(questId), 18 - parseInt(existing.rows[0].count)]);
+        console.log('[Migration] MetaSpace Partnership: seeded completions up to 18');
+      }
+    }
+  } catch (err) {
+    console.log('[Migration] MetaSpace completions skipped:', err.message);
+  }
+
   console.log('[Migration] Table columns verified');
 };
 

@@ -7,6 +7,7 @@ const REFERRAL_TYPES = ['referral']
 function getVerificationLabel(reqType) {
   if (SOCIAL_TYPES.includes(reqType)) return { icon: '\u{1F9E0}', label: 'Smart Verification (no API needed)' }
   if (reqType === 'partner_quest') return { icon: '\u{1F517}', label: 'API Verification (real)' }
+  if (reqType === 'discord_ticket') return { icon: '\u{1F3AB}', label: 'Discord Ticket Verification' }
   if (GAME_TYPES.includes(reqType)) return { icon: '\u{1F3AE}', label: 'Auto-verified' }
   if (REFERRAL_TYPES.includes(reqType)) return { icon: '\u{1F465}', label: 'Auto-verified' }
   return { icon: '\u{2753}', label: 'Unknown' }

@@ -74,6 +74,11 @@ class Quest {
       }
     }
 
+    // Discord ticket quests - manually verified via Discord tickets
+    if (reqType === 'discord_ticket') {
+      verificationMethod = 'manual';
+    }
+
     // Get external URL from metadata
     const externalUrl = dbQuest.requirement_metadata?.url || null;
 
