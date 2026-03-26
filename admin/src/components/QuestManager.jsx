@@ -125,7 +125,9 @@ export default function QuestManager({ apiCall }) {
                     ? <span className="text-accent">{Number(quest.reward_amount).toLocaleString()} XP</span>
                     : quest.requirement_type === 'partner_quest'
                       ? <span className="text-green">Boost</span>
-                      : <span className="text-muted">TBA</span>
+                      : quest.requirement_metadata?.reward_label
+                        ? <span className="text-green">{quest.requirement_metadata.reward_label}</span>
+                        : <span className="text-muted">TBA</span>
                   }
                 </td>
                 <td>{quest.completions}</td>

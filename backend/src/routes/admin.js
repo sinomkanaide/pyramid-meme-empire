@@ -672,7 +672,7 @@ router.get('/quests', async (req, res) => {
         reward_amount: q.reward_amount ? parseInt(q.reward_amount) : null,
         is_active: q.is_active,
         sort_order: q.sort_order,
-        completions: parseInt(q.completion_count),
+        completions: parseInt(q.completion_count) + (parseInt(q.requirement_metadata?.base_completions) || 0),
         created_at: q.created_at
       }))
     });
