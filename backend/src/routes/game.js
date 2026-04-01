@@ -288,7 +288,6 @@ router.get('/leaderboard', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 10, 100);
 
     // Check if active season is frozen - serve snapshot instead
-    const db = require('../config/database');
     const frozenCheck = await db.query(
       'SELECT frozen_snapshot FROM leaderboard_seasons WHERE is_active = true AND is_frozen = true LIMIT 1'
     ).catch(() => ({ rows: [] }));

@@ -1327,7 +1327,7 @@ router.get('/leaderboard', async (req, res) => {
 
     // If frozen and no season filter, use snapshot for display
     let finalPlayers = playersResult.rows.map((p, i) => ({ rank: i + 1, ...p }));
-    if (activeSeason?.is_frozen && activeSeason?.frozen_snapshot !== undefined && !seasonId) {
+    if (activeSeason?.is_frozen && !seasonId) {
       // Fetch snapshot separately to keep activeSeason response clean
       const snapResult = await db.query('SELECT frozen_snapshot FROM leaderboard_seasons WHERE id = $1', [activeSeason.id]);
       if (snapResult.rows[0]?.frozen_snapshot) {
