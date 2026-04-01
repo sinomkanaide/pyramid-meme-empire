@@ -1205,6 +1205,67 @@ router.patch('/leaderboard/seasons/:id/activate', async (req, res) => {
   }
 });
 
+// PATCH /admin/leaderboard/freeze - Freeze/unfreeze the active season's leaderboard
+router.patch('/leaderboard/freeze', async (req, res) => {
+  try {
+    // Get active season
+    const activeResult = await db.query('SELECT * FROM leaderboard_seasons WHERE is_active = true LIMIT 1');
+    if (activeResult.rows.length === 0) {
+      return res.status(400).json({ error: 'No active season to freeze' });
+    }
+
+    const season = activeResult.rows[0];
+    const newFrozen = !season.is_frozen;
+
+    if (newFrozen) {
+      // Freezing: capture snapshot of current standings
+      const playersResult = await db.query(`
+        SELECT u.id, u.wallet_address, u.username, u.is_premium, u.has_battle_pass,
+               gp.level, gp.bricks, gp.total_taps, gp.total_bricks_earned,
+               u.created_at
+        FROM users u
+        JOIN game_progress gp ON gp.user_id = u.id
+        ORDER BY gp.bricks DESC
+        LIMIT 200
+      `);
+
+      const snapshot = playersResult.rows.map((p, i) => ({
+        rank: i + 1,
+        id: p.id,
+        wallet_address: p.wallet_address,
+        username: p.username,
+        is_premium: p.is_premium,
+        has_battle_pass: p.has_battle_pass,
+        level: p.level,
+        bricks: p.bricks,
+        total_taps: p.total_taps,
+        total_bricks_earned: p.total_bricks_earned,
+        created_at: p.created_at
+      }));
+
+      await db.query(
+        'UPDATE leaderboard_seasons SET is_frozen = true, frozen_at = NOW(), frozen_snapshot = $1 WHERE id = $2',
+        [JSON.stringify(snapshot), season.id]
+      );
+
+      console.log(`[Leaderboard] Season "${season.name}" FROZEN with ${snapshot.length} players snapshot`);
+      res.json({ success: true, frozen: true, players_snapshot: snapshot.length, frozen_at: new Date().toISOString() });
+    } else {
+      // Unfreezing: clear snapshot
+      await db.query(
+        'UPDATE leaderboard_seasons SET is_frozen = false, frozen_at = NULL, frozen_snapshot = NULL WHERE id = $1',
+        [season.id]
+      );
+
+      console.log(`[Leaderboard] Season "${season.name}" UNFROZEN`);
+      res.json({ success: true, frozen: false });
+    }
+  } catch (error) {
+    console.error('Admin freeze leaderboard error:', error);
+    res.status(500).json({ error: 'Failed to freeze leaderboard' });
+  }
+});
+
 // DELETE /admin/leaderboard/seasons/:id - Delete season
 router.delete('/leaderboard/seasons/:id', async (req, res) => {
   try {
@@ -1257,15 +1318,27 @@ router.get('/leaderboard', async (req, res) => {
       SELECT * FROM leaderboard_prizes ORDER BY position_from ASC
     `);
 
-    // Get active season
+    // Get active season (include freeze status)
     const activeSeasonResult = await db.query(
-      'SELECT * FROM leaderboard_seasons WHERE is_active = true LIMIT 1'
+      'SELECT id, name, starts_at, ends_at, is_active, prize_pool_usdc, is_frozen, frozen_at, created_at FROM leaderboard_seasons WHERE is_active = true LIMIT 1'
     );
 
+    const activeSeason = activeSeasonResult.rows[0] || null;
+
+    // If frozen and no season filter, use snapshot for display
+    let finalPlayers = playersResult.rows.map((p, i) => ({ rank: i + 1, ...p }));
+    if (activeSeason?.is_frozen && activeSeason?.frozen_snapshot !== undefined && !seasonId) {
+      // Fetch snapshot separately to keep activeSeason response clean
+      const snapResult = await db.query('SELECT frozen_snapshot FROM leaderboard_seasons WHERE id = $1', [activeSeason.id]);
+      if (snapResult.rows[0]?.frozen_snapshot) {
+        finalPlayers = snapResult.rows[0].frozen_snapshot.slice(0, limit);
+      }
+    }
+
     res.json({
-      players: playersResult.rows.map((p, i) => ({ rank: i + 1, ...p })),
+      players: finalPlayers,
       prizes: prizesResult.rows,
-      activeSeason: activeSeasonResult.rows[0] || null
+      activeSeason
     });
   } catch (error) {
     console.error('Admin leaderboard error:', error);

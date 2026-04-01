@@ -21,6 +21,7 @@ export default function LeaderboardManager({ apiCall }) {
   const [showCreateSeason, setShowCreateSeason] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
   const [recalcResult, setRecalcResult] = useState(null)
+  const [freezing, setFreezing] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -150,6 +151,29 @@ export default function LeaderboardManager({ apiCall }) {
     }
   }
 
+  const toggleFreeze = async () => {
+    const isFrozen = activeSeason?.is_frozen
+    const msg = isFrozen
+      ? 'UNFREEZE the leaderboard? Rankings will go back to live data.'
+      : 'FREEZE the leaderboard? This will lock the current standings as the final Season 1 results. Players can still play but the leaderboard won\'t change.'
+    if (!confirm(msg)) return
+    setFreezing(true)
+    try {
+      const data = await apiCall('/api/admin/leaderboard/freeze', { method: 'PATCH' })
+      if (data.success) {
+        alert(data.frozen
+          ? `Leaderboard FROZEN! ${data.players_snapshot} players snapshot saved.`
+          : 'Leaderboard UNFROZEN. Live rankings restored.'
+        )
+        loadData()
+      }
+    } catch (err) {
+      alert('Failed: ' + err.message)
+    } finally {
+      setFreezing(false)
+    }
+  }
+
   const calculateTotal = (prizeList) => {
     return prizeList.reduce((sum, p) => {
       const range = (p.position_to || 0) - (p.position_from || 0) + 1
@@ -170,15 +194,62 @@ export default function LeaderboardManager({ apiCall }) {
           <h1 className="page-title">Leaderboard</h1>
           <span className="page-subtitle" style={{ margin: 0 }}>{players.length} players</span>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={recalculateLevels}
-          disabled={recalculating}
-          style={{ whiteSpace: 'nowrap' }}
-        >
-          {recalculating ? 'Recalculating...' : 'Recalculate All Levels'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {activeSeason && (
+            <button
+              className={`btn ${activeSeason.is_frozen ? 'btn-danger' : 'btn-primary'}`}
+              onClick={toggleFreeze}
+              disabled={freezing}
+              style={{
+                whiteSpace: 'nowrap',
+                ...(activeSeason.is_frozen ? {
+                  background: 'rgba(0,170,255,0.15)',
+                  borderColor: '#00aaff',
+                  color: '#00aaff',
+                  animation: 'pulse-freeze 2s ease-in-out infinite'
+                } : {
+                  background: 'rgba(255,68,102,0.15)',
+                  borderColor: '#ff4466',
+                  color: '#ff4466'
+                })
+              }}
+            >
+              {freezing ? 'Processing...' : activeSeason.is_frozen ? '\u{2744}\u{FE0F} FROZEN - Click to Unfreeze' : '\u{1F6D1} Freeze Leaderboard'}
+            </button>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={recalculateLevels}
+            disabled={recalculating}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {recalculating ? 'Recalculating...' : 'Recalculate All Levels'}
+          </button>
+        </div>
       </div>
+
+      {activeSeason?.is_frozen && (
+        <div style={{
+          background: 'rgba(0,170,255,0.1)',
+          border: '1px solid rgba(0,170,255,0.4)',
+          borderRadius: 8,
+          padding: '12px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12
+        }}>
+          <span style={{ fontSize: 24 }}>{'\u{2744}\u{FE0F}'}</span>
+          <div>
+            <div style={{ fontWeight: 'bold', color: '#00aaff', fontSize: 14 }}>
+              LEADERBOARD FROZEN - Season 1 Final Standings
+            </div>
+            <div style={{ fontSize: 11, color: '#a0a0b8', marginTop: 2 }}>
+              Frozen at: {new Date(activeSeason.frozen_at).toLocaleString()} | Players can still play but rankings are locked.
+            </div>
+          </div>
+        </div>
+      )}
 
       {recalcResult && (
         <div className="card" style={{ marginTop: 12, padding: '12px 16px', background: recalcResult.fixed > 0 ? 'rgba(0,255,136,0.08)' : 'rgba(139,92,246,0.08)', border: recalcResult.fixed > 0 ? '1px solid rgba(0,255,136,0.3)' : '1px solid rgba(139,92,246,0.15)' }}>
@@ -211,10 +282,16 @@ export default function LeaderboardManager({ apiCall }) {
         </div>
 
         {activeSeason && (
-          <div style={{ padding: '8px 12px', background: 'rgba(0,255,136,0.08)', borderRadius: 6, margin: '8px 0', fontSize: 12 }}>
-            Active: <strong className="text-green">{activeSeason.name}</strong>
+          <div style={{
+            padding: '8px 12px',
+            background: activeSeason.is_frozen ? 'rgba(0,170,255,0.08)' : 'rgba(0,255,136,0.08)',
+            borderRadius: 6, margin: '8px 0', fontSize: 12,
+            border: activeSeason.is_frozen ? '1px solid rgba(0,170,255,0.2)' : 'none'
+          }}>
+            Active: <strong style={{ color: activeSeason.is_frozen ? '#00aaff' : '#00ff88' }}>{activeSeason.name}</strong>
             {' '}({fmtDate(activeSeason.starts_at)} - {fmtDate(activeSeason.ends_at)})
             {activeSeason.prize_pool_usdc > 0 && <span className="text-accent"> | Pool: ${Number(activeSeason.prize_pool_usdc).toLocaleString()}</span>}
+            {activeSeason.is_frozen && <span style={{ color: '#00aaff', fontWeight: 'bold' }}> | {'\u{2744}\u{FE0F}'} FROZEN</span>}
           </div>
         )}
 
@@ -239,7 +316,8 @@ export default function LeaderboardManager({ apiCall }) {
                   <span>{s.name}</span>
                   <span className="text-muted">{fmtDate(s.starts_at)}-{fmtDate(s.ends_at)}</span>
                   {!s.is_active && <button className="btn btn-sm" style={{ padding: '1px 6px', fontSize: 10 }} onClick={() => activateSeason(s.id)}>Activate</button>}
-                  {s.is_active && <span className="badge badge-green" style={{ fontSize: 9 }}>Live</span>}
+                  {s.is_active && !s.is_frozen && <span className="badge badge-green" style={{ fontSize: 9 }}>Live</span>}
+                  {s.is_active && s.is_frozen && <span className="badge" style={{ fontSize: 9, background: 'rgba(0,170,255,0.2)', color: '#00aaff', border: '1px solid rgba(0,170,255,0.4)' }}>{'\u{2744}\u{FE0F}'} Frozen</span>}
                   <button className="btn btn-sm btn-danger" style={{ padding: '1px 6px', fontSize: 10 }} onClick={() => deleteSeason(s.id)}>X</button>
                 </div>
               ))}

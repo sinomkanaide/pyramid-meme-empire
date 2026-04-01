@@ -155,6 +155,10 @@ const runMigrations = async () => {
     `UPDATE quests SET reward_amount = 200 WHERE requirement_type = 'tap_count' AND requirement_value = 100`,
     // Fix Stack 1000 Bricks: 1000 XP
     `UPDATE quests SET reward_amount = 1000 WHERE requirement_type = 'tap_count' AND requirement_value = 1000`,
+    // Leaderboard freeze columns
+    'ALTER TABLE leaderboard_seasons ADD COLUMN IF NOT EXISTS is_frozen BOOLEAN DEFAULT false',
+    'ALTER TABLE leaderboard_seasons ADD COLUMN IF NOT EXISTS frozen_at TIMESTAMP WITH TIME ZONE',
+    'ALTER TABLE leaderboard_seasons ADD COLUMN IF NOT EXISTS frozen_snapshot JSONB',
     // MetaSpace Partnership quest
     `INSERT INTO quests (title, description, icon, quest_type, requirement_type, requirement_value, requirement_metadata, reward_type, is_reward_hidden, sort_order)
      SELECT 'MetaSpace Partnership', 'Open a Discord ticket to claim your 1 GIGA ticket reward', '🎫', 'partner', 'discord_ticket', 1, '{"url": "", "reward_label": "1 GIGA ticket", "base_completions": 18}', 'pme', TRUE, 10

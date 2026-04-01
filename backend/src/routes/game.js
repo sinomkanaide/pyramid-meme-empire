@@ -286,6 +286,26 @@ router.post('/claim', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+
+    // Check if active season is frozen - serve snapshot instead
+    const db = require('../config/database');
+    const frozenCheck = await db.query(
+      'SELECT frozen_snapshot FROM leaderboard_seasons WHERE is_active = true AND is_frozen = true LIMIT 1'
+    ).catch(() => ({ rows: [] }));
+
+    if (frozenCheck.rows.length > 0 && frozenCheck.rows[0].frozen_snapshot) {
+      const snapshot = frozenCheck.rows[0].frozen_snapshot;
+      const formatted = snapshot.slice(0, limit).map(p => ({
+        rank: p.rank,
+        address: p.wallet_address,
+        username: p.username,
+        bricks: p.bricks,
+        level: p.level,
+        isPremium: p.is_premium
+      }));
+      return res.json({ leaderboard: formatted, frozen: true });
+    }
+
     const leaderboard = await User.getLeaderboard(limit);
 
     // Format for frontend
