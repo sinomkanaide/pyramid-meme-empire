@@ -1397,7 +1397,8 @@ router.post('/recalculate-levels', async (req, res) => {
 
     const result = await db.query(`
       SELECT gp.user_id, gp.bricks, gp.level as current_level,
-             u.is_premium, u.has_battle_pass
+             u.is_premium, u.premium_expires_at,
+             u.has_battle_pass, u.battle_pass_expires_at
       FROM game_progress gp
       JOIN users u ON u.id = gp.user_id
       ORDER BY gp.user_id
@@ -1406,11 +1407,16 @@ router.post('/recalculate-levels', async (req, res) => {
     let fixed = 0;
     const total = result.rows.length;
     const fixes = [];
+    const now = new Date();
 
     for (const user of result.rows) {
       const totalXp = parseInt(user.bricks) || 0;
       const calculatedLevel = calculateLevelFromXp(totalXp);
-      const correctLevel = applyLevelCap(calculatedLevel, user.is_premium, user.has_battle_pass);
+
+      // Check actual premium/BP status including expiration
+      const isPremium = user.is_premium && (!user.premium_expires_at || new Date(user.premium_expires_at) > now);
+      const hasBattlePass = user.has_battle_pass && (!user.battle_pass_expires_at || new Date(user.battle_pass_expires_at) > now);
+      const correctLevel = applyLevelCap(calculatedLevel, isPremium, hasBattlePass);
 
       if (correctLevel !== user.current_level) {
         await db.query(

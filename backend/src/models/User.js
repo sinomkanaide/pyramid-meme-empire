@@ -158,7 +158,7 @@ class User {
     const user = result.rows[0];
 
     if (!user || !user.has_battle_pass) return false;
-    if (!user.battle_pass_expires_at) return false;
+    if (!user.battle_pass_expires_at) return true; // Permanent battle pass (no expiry)
 
     return new Date(user.battle_pass_expires_at) > new Date();
   }
