@@ -23,6 +23,8 @@ export default function LeaderboardManager({ apiCall }) {
   const [recalcResult, setRecalcResult] = useState(null)
   const [freezing, setFreezing] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [diagResult, setDiagResult] = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -225,6 +227,26 @@ export default function LeaderboardManager({ apiCall }) {
     }
   }
 
+  const diagnoseLevels = async () => {
+    const input = prompt('Enter user IDs to diagnose (comma-separated).\nExample: 222,357,393,399')
+    if (!input) return
+    const userIds = input.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+    if (userIds.length === 0) { alert('No valid user IDs'); return }
+    setDiagnosing(true)
+    setDiagResult(null)
+    try {
+      const data = await apiCall('/api/admin/diagnose-levels', {
+        method: 'POST',
+        body: JSON.stringify({ userIds })
+      })
+      setDiagResult(data)
+    } catch (err) {
+      alert('Diagnosis failed: ' + err.message)
+    } finally {
+      setDiagnosing(false)
+    }
+  }
+
   const calculateTotal = (prizeList) => {
     return prizeList.reduce((sum, p) => {
       const range = (p.position_to || 0) - (p.position_from || 0) + 1
@@ -268,6 +290,14 @@ export default function LeaderboardManager({ apiCall }) {
               {freezing ? 'Processing...' : activeSeason.is_frozen ? '\u{2744}\u{FE0F} FROZEN - Click to Unfreeze' : '\u{1F6D1} Freeze Leaderboard'}
             </button>
           )}
+          <button
+            className="btn"
+            onClick={diagnoseLevels}
+            disabled={diagnosing}
+            style={{ whiteSpace: 'nowrap', borderColor: '#ff4466', color: '#ff4466' }}
+          >
+            {diagnosing ? 'Diagnosing...' : '\u{1F50D} Diagnose Levels'}
+          </button>
           <button
             className="btn"
             onClick={exportCSV}
@@ -319,17 +349,49 @@ export default function LeaderboardManager({ apiCall }) {
             }
           </div>
           {recalcResult.fixes && recalcResult.fixes.length > 0 && (
-            <div style={{ fontSize: 11, maxHeight: 150, overflowY: 'auto' }}>
+            <div style={{ fontSize: 11, maxHeight: 200, overflowY: 'auto' }}>
               {recalcResult.fixes.map((f, i) => (
-                <div key={i} style={{ padding: '2px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  User #{f.userId}: Level {f.oldLevel} → <strong className="text-green">{f.newLevel}</strong> ({f.bricks.toLocaleString()} XP)
-                  {f.hasBattlePass && <span className="badge badge-gold" style={{ marginLeft: 6, fontSize: 9 }}>BP</span>}
-                  {f.isPremium && <span className="badge badge-blue" style={{ marginLeft: 6, fontSize: 9 }}>Premium</span>}
+                <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  User #{f.userId}: Level {f.oldLevel} → <strong className="text-green">{f.newLevel}</strong> (uncapped: {f.uncappedLevel}, {f.bricks.toLocaleString()} XP)
+                  {f.hasBattlePassFlag && <span className="badge badge-gold" style={{ marginLeft: 6, fontSize: 9 }}>BP flag</span>}
+                  {f.hasBattlePassActive ? <span className="badge badge-green" style={{ marginLeft: 4, fontSize: 9 }}>BP ACTIVE</span> : f.hasBattlePassFlag ? <span className="badge" style={{ marginLeft: 4, fontSize: 9, background: 'rgba(255,68,102,0.2)', color: '#ff4466', border: '1px solid #ff4466' }}>BP EXPIRED</span> : null}
+                  {f.battlePassExpires && <span className="text-muted" style={{ marginLeft: 4, fontSize: 9 }}>exp: {new Date(f.battlePassExpires).toLocaleDateString()}</span>}
+                  {f.isPremiumActive && <span className="badge badge-blue" style={{ marginLeft: 4, fontSize: 9 }}>Premium</span>}
                 </div>
               ))}
             </div>
           )}
           <button className="btn btn-sm" onClick={() => setRecalcResult(null)} style={{ marginTop: 8, fontSize: 10 }}>Dismiss</button>
+        </div>
+      )}
+
+      {diagResult && (
+        <div className="card" style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(255,68,102,0.05)', border: '1px solid rgba(255,68,102,0.3)' }}>
+          <div style={{ fontSize: 13, fontWeight: 'bold', marginBottom: 8, color: '#ff4466' }}>
+            Level Diagnosis — Server time: {new Date(diagResult.serverTime).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, maxHeight: 300, overflowY: 'auto' }}>
+            {diagResult.diagnoses.map((d, i) => (
+              <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontWeight: 'bold' }}>
+                  User #{d.userId} — {d.wallet.slice(0, 10)}... — {d.username || 'no name'}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, margin: '4px 0' }}>
+                  <span>Bricks: <strong>{(d.bricks || 0).toLocaleString()}</strong></span>
+                  <span>DB Level: <strong>{d.currentLevelInDB}</strong></span>
+                  <span>Uncapped: <strong style={{ color: '#00ffff' }}>{d.uncappedLevel}</strong></span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '4px 0' }}>
+                  <span>Premium: {d.premium.flag ? (d.premium.isActive ? <strong className="text-green">ACTIVE</strong> : <strong style={{ color: '#ff4466' }}>EXPIRED {d.premium.expiresAt ? new Date(d.premium.expiresAt).toLocaleDateString() : ''}</strong>) : <span className="text-muted">No</span>}</span>
+                  <span>Battle Pass: {d.battlePass.flag ? (d.battlePass.isPermanent ? <strong className="text-green">PERMANENT</strong> : d.battlePass.isActive ? <strong className="text-green">ACTIVE until {new Date(d.battlePass.expiresAt).toLocaleDateString()}</strong> : <strong style={{ color: '#ff4466' }}>EXPIRED {new Date(d.battlePass.expiresAt).toLocaleDateString()}</strong>) : <span className="text-muted">No</span>}</span>
+                </div>
+                <div style={{ marginTop: 4, padding: '4px 8px', borderRadius: 4, background: d.diagnosis.includes('EXPIRED') ? 'rgba(255,68,102,0.15)' : d.diagnosis.includes('ACTIVE') ? 'rgba(0,255,136,0.1)' : 'rgba(139,92,246,0.08)', fontSize: 11, fontWeight: 'bold' }}>
+                  {d.diagnosis}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-sm" onClick={() => setDiagResult(null)} style={{ marginTop: 8, fontSize: 10 }}>Dismiss</button>
         </div>
       )}
 

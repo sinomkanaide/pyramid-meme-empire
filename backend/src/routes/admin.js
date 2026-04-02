@@ -1390,6 +1390,69 @@ router.put('/leaderboard/prizes', async (req, res) => {
 // RECALCULATE ALL USER LEVELS
 // ============================================================================
 
+// POST /admin/diagnose-levels - Diagnose level issues for specific users
+router.post('/diagnose-levels', async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    if (!userIds || !Array.isArray(userIds)) {
+      return res.status(400).json({ error: 'userIds array required' });
+    }
+
+    const result = await db.query(`
+      SELECT u.id, u.wallet_address, u.username,
+             u.is_premium, u.premium_expires_at,
+             u.has_battle_pass, u.battle_pass_expires_at,
+             gp.bricks, gp.level, gp.total_taps
+      FROM users u
+      LEFT JOIN game_progress gp ON u.id = gp.user_id
+      WHERE u.id = ANY($1)
+      ORDER BY gp.bricks DESC
+    `, [userIds]);
+
+    const now = new Date();
+    const diagnoses = result.rows.map(u => {
+      const isPremiumActive = u.is_premium && (!u.premium_expires_at || new Date(u.premium_expires_at) > now);
+      const isBPActive = u.has_battle_pass && (!u.battle_pass_expires_at || new Date(u.battle_pass_expires_at) > now);
+      const uncappedLevel = calculateLevelFromXp(parseInt(u.bricks) || 0);
+      const cappedLevel = applyLevelCap(uncappedLevel, isPremiumActive, isBPActive);
+
+      return {
+        userId: u.id,
+        wallet: u.wallet_address,
+        username: u.username,
+        bricks: u.bricks,
+        currentLevelInDB: u.level,
+        uncappedLevel,
+        correctLevel: cappedLevel,
+        levelMismatch: u.level !== cappedLevel,
+        premium: {
+          flag: u.is_premium,
+          expiresAt: u.premium_expires_at,
+          isActive: isPremiumActive,
+          isExpired: u.is_premium && u.premium_expires_at && new Date(u.premium_expires_at) <= now
+        },
+        battlePass: {
+          flag: u.has_battle_pass,
+          expiresAt: u.battle_pass_expires_at,
+          isActive: isBPActive,
+          isExpired: u.has_battle_pass && u.battle_pass_expires_at && new Date(u.battle_pass_expires_at) <= now,
+          isPermanent: u.has_battle_pass && !u.battle_pass_expires_at
+        },
+        diagnosis: !u.has_battle_pass && !u.is_premium
+          ? 'FREE USER - level 3 cap is correct'
+          : isBPActive || isPremiumActive
+            ? `ACTIVE ${isBPActive ? 'BP' : 'PREMIUM'} - should be level ${uncappedLevel}`
+            : `EXPIRED ${u.has_battle_pass ? 'BP' : 'PREMIUM'} - expired at ${u.battle_pass_expires_at || u.premium_expires_at} - capped to level 3`
+      };
+    });
+
+    res.json({ diagnoses, serverTime: now.toISOString() });
+  } catch (error) {
+    console.error('[Admin] Diagnose levels error:', error);
+    res.status(500).json({ error: 'Diagnosis failed' });
+  }
+});
+
 // POST /admin/recalculate-levels - Fix all users with incorrect levels
 router.post('/recalculate-levels', async (req, res) => {
   try {
@@ -1426,12 +1489,17 @@ router.post('/recalculate-levels', async (req, res) => {
         fixes.push({
           userId: user.user_id,
           bricks: totalXp,
+          uncappedLevel: calculatedLevel,
           oldLevel: user.current_level,
           newLevel: correctLevel,
-          isPremium: user.is_premium,
-          hasBattlePass: user.has_battle_pass
+          isPremiumFlag: user.is_premium,
+          isPremiumActive: isPremium,
+          premiumExpires: user.premium_expires_at || null,
+          hasBattlePassFlag: user.has_battle_pass,
+          hasBattlePassActive: hasBattlePass,
+          battlePassExpires: user.battle_pass_expires_at || null
         });
-        console.log(`[Recalc] User ${user.user_id}: Level ${user.current_level} → ${correctLevel} (${totalXp} bricks)`);
+        console.log(`[Recalc] User ${user.user_id}: Level ${user.current_level} → ${correctLevel} (${totalXp} bricks, BP_flag=${user.has_battle_pass}, BP_active=${hasBattlePass}, BP_expires=${user.battle_pass_expires_at})`);
         fixed++;
       }
     }
