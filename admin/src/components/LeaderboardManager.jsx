@@ -22,6 +22,7 @@ export default function LeaderboardManager({ apiCall }) {
   const [recalculating, setRecalculating] = useState(false)
   const [recalcResult, setRecalcResult] = useState(null)
   const [freezing, setFreezing] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -174,6 +175,54 @@ export default function LeaderboardManager({ apiCall }) {
     }
   }
 
+  const exportCSV = async () => {
+    setExporting(true)
+    try {
+      const data = await apiCall('/api/admin/leaderboard/export')
+      if (!data.players || data.players.length === 0) {
+        alert('No players to export')
+        return
+      }
+
+      // Build CSV
+      const headers = ['Rank', 'Wallet', 'Username', 'Level', 'Bricks', 'Total Taps', 'Taps/Min', 'Bot Score %', 'Flags', 'Is Flagged', 'Flag Reason', 'Premium', 'Battle Pass', 'Purchases', 'Registered']
+      const rows = data.players.map(p => [
+        p.rank,
+        p.wallet,
+        p.username,
+        p.level,
+        p.bricks,
+        p.totalTaps,
+        p.tapsPerMin,
+        p.botScore,
+        p.flags.join('; '),
+        p.isFlagged ? 'YES' : '',
+        p.flagReason,
+        p.isPremium ? 'YES' : '',
+        p.hasBattlePass ? 'YES' : '',
+        p.purchases,
+        new Date(p.registeredAt).toISOString().split('T')[0]
+      ])
+
+      const csvContent = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const prefix = data.seasonName ? data.seasonName.replace(/\s+/g, '_') : 'leaderboard'
+      const frozen = data.frozenAt ? '_FROZEN' : ''
+      a.download = `${prefix}${frozen}_wallets_audit_${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+
+      alert(`Exported ${data.players.length} players${data.frozenAt ? ' (frozen snapshot)' : ' (live)'}`)
+    } catch (err) {
+      alert('Export failed: ' + err.message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const calculateTotal = (prizeList) => {
     return prizeList.reduce((sum, p) => {
       const range = (p.position_to || 0) - (p.position_from || 0) + 1
@@ -217,6 +266,14 @@ export default function LeaderboardManager({ apiCall }) {
               {freezing ? 'Processing...' : activeSeason.is_frozen ? '\u{2744}\u{FE0F} FROZEN - Click to Unfreeze' : '\u{1F6D1} Freeze Leaderboard'}
             </button>
           )}
+          <button
+            className="btn"
+            onClick={exportCSV}
+            disabled={exporting}
+            style={{ whiteSpace: 'nowrap', borderColor: '#ffd700', color: '#ffd700' }}
+          >
+            {exporting ? 'Exporting...' : '\u{1F4E5} Export Wallets + Audit'}
+          </button>
           <button
             className="btn btn-primary"
             onClick={recalculateLevels}

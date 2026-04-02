@@ -1448,6 +1448,120 @@ router.post('/recalculate-levels', async (req, res) => {
 // ANTI-BOT: AUDIT + FLAG/UNFLAG
 // ============================================================================
 
+// GET /admin/leaderboard/export - Bulk audit: all leaderboard players with bot scores
+router.get('/leaderboard/export', async (req, res) => {
+  try {
+    // Check if frozen snapshot exists
+    const frozenResult = await db.query(
+      'SELECT frozen_snapshot, frozen_at, name FROM leaderboard_seasons WHERE is_active = true AND is_frozen = true LIMIT 1'
+    );
+
+    // Get players: frozen snapshot or live
+    let playerIds;
+    let frozenAt = null;
+    let seasonName = null;
+
+    if (frozenResult.rows.length > 0 && frozenResult.rows[0].frozen_snapshot) {
+      const snapshot = frozenResult.rows[0].frozen_snapshot;
+      playerIds = snapshot.map(p => p.id);
+      frozenAt = frozenResult.rows[0].frozen_at;
+      seasonName = frozenResult.rows[0].name;
+    } else {
+      // Live leaderboard
+      const liveResult = await db.query(`
+        SELECT u.id FROM users u
+        JOIN game_progress gp ON gp.user_id = u.id
+        ORDER BY gp.bricks DESC LIMIT 200
+      `);
+      playerIds = liveResult.rows.map(r => r.id);
+    }
+
+    if (playerIds.length === 0) {
+      return res.json({ players: [], frozenAt, seasonName });
+    }
+
+    // Bulk fetch all user data + game progress
+    const usersResult = await db.query(`
+      SELECT u.id, u.wallet_address, u.username, u.is_premium, u.has_battle_pass,
+             u.is_flagged, u.flag_reason, u.created_at,
+             gp.bricks, gp.level, gp.total_taps, gp.total_bricks_earned
+      FROM users u
+      LEFT JOIN game_progress gp ON u.id = gp.user_id
+      WHERE u.id = ANY($1)
+      ORDER BY gp.bricks DESC
+    `, [playerIds]);
+
+    // Bulk fetch purchase counts
+    const purchaseCounts = {};
+    try {
+      const pResult = await db.query(`
+        SELECT user_id, COUNT(*) as count
+        FROM transactions
+        WHERE user_id = ANY($1) AND status = 'confirmed'
+        GROUP BY user_id
+      `, [playerIds]);
+      pResult.rows.forEach(r => { purchaseCounts[r.user_id] = parseInt(r.count); });
+    } catch (e) { /* ok */ }
+
+    // Bulk fetch peak hour taps (last 24h)
+    const peakHours = {};
+    try {
+      const phResult = await db.query(`
+        SELECT user_id, MAX(hourly_count) as peak
+        FROM (
+          SELECT user_id, date_trunc('hour', tapped_at) as hour, COUNT(*) as hourly_count
+          FROM taps
+          WHERE user_id = ANY($1) AND tapped_at >= NOW() - INTERVAL '24 hours'
+          GROUP BY user_id, date_trunc('hour', tapped_at)
+        ) sub
+        GROUP BY user_id
+      `, [playerIds]);
+      phResult.rows.forEach(r => { peakHours[r.user_id] = parseInt(r.peak); });
+    } catch (e) { /* ok */ }
+
+    const now = new Date();
+    const players = usersResult.rows.map((u, i) => {
+      const hoursSinceReg = Math.max(0.1, (now - new Date(u.created_at)) / (1000 * 60 * 60));
+      const tapsPerHour = (u.total_taps || 0) / hoursSinceReg;
+      const tapsPerMinute = tapsPerHour / 60;
+      const hasPurchases = (purchaseCounts[u.id] || 0) > 0;
+      const peakHour = peakHours[u.id] || 0;
+
+      // Bot score (same logic as single audit)
+      let botScore = 0;
+      const flags = [];
+      if (tapsPerMinute > 100) { botScore += 30; flags.push('high_tap_rate'); }
+      if (tapsPerMinute > 150) { botScore += 30; flags.push('extreme_tap_rate'); }
+      if (hoursSinceReg > 5 && tapsPerMinute > 80) { botScore += 25; flags.push('sustained_high_rate'); }
+      if (!hasPurchases && tapsPerMinute > 100) { botScore += 15; flags.push('no_purchases'); }
+      if (peakHour > 7200) { botScore += 20; flags.push('peak_hour_extreme'); }
+
+      return {
+        rank: i + 1,
+        wallet: u.wallet_address,
+        username: u.username || '',
+        level: u.level || 1,
+        bricks: u.bricks || 0,
+        totalTaps: u.total_taps || 0,
+        tapsPerMin: parseFloat(tapsPerMinute.toFixed(1)),
+        isPremium: u.is_premium || false,
+        hasBattlePass: u.has_battle_pass || false,
+        purchases: purchaseCounts[u.id] || 0,
+        botScore: Math.min(100, botScore),
+        flags,
+        isFlagged: u.is_flagged || false,
+        flagReason: u.flag_reason || '',
+        registeredAt: u.created_at
+      };
+    });
+
+    res.json({ players, frozenAt, seasonName, total: players.length });
+  } catch (error) {
+    console.error('[Admin] Leaderboard export error:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
 // POST /admin/audit-user - Analyze user for bot behavior
 router.post('/audit-user', async (req, res) => {
   try {
