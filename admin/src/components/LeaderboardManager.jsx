@@ -185,11 +185,13 @@ export default function LeaderboardManager({ apiCall }) {
       }
 
       // Build CSV
-      const headers = ['Rank', 'Wallet', 'Username', 'Level', 'Bricks', 'Total Taps', 'Taps/Min', 'Bot Score %', 'Flags', 'Is Flagged', 'Flag Reason', 'Premium', 'Battle Pass', 'Purchases', 'Registered']
+      const headers = ['Rank', 'Wallet', 'Username', 'Discord', 'Twitter', 'Level', 'Bricks', 'Total Taps', 'Taps/Min', 'Bot Score %', 'Flags', 'Is Flagged', 'Flag Reason', 'Premium', 'Battle Pass', 'Purchases', 'Registered']
       const rows = data.players.map(p => [
         p.rank,
         p.wallet,
         p.username,
+        p.discord,
+        p.twitter,
         p.level,
         p.bricks,
         p.totalTaps,

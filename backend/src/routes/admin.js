@@ -1482,7 +1482,8 @@ router.get('/leaderboard/export', async (req, res) => {
 
     // Bulk fetch all user data + game progress
     const usersResult = await db.query(`
-      SELECT u.id, u.wallet_address, u.username, u.is_premium, u.has_battle_pass,
+      SELECT u.id, u.wallet_address, u.username, u.discord_username, u.twitter_username,
+             u.is_premium, u.has_battle_pass,
              u.is_flagged, u.flag_reason, u.created_at,
              gp.bricks, gp.level, gp.total_taps, gp.total_bricks_earned
       FROM users u
@@ -1540,6 +1541,8 @@ router.get('/leaderboard/export', async (req, res) => {
         rank: i + 1,
         wallet: u.wallet_address,
         username: u.username || '',
+        discord: u.discord_username || '',
+        twitter: u.twitter_username || '',
         level: u.level || 1,
         bricks: u.bricks || 0,
         totalTaps: u.total_taps || 0,
