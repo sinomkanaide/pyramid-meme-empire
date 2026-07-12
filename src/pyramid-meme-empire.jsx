@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
+import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X, ArrowLeftRight } from 'lucide-react';
 import { ethers } from 'ethers';
 
 // Lazy-loaded so the LI.FI widget (and its wagmi/viem deps) ship as a separate
-// chunk, loaded only when the user opens "Get Funds".
-const GetFundsModal = lazy(() => import('./components/GetFundsModal'));
+// chunk, loaded only when the user opens the Bridge tab.
+const BridgeView = lazy(() => import('./components/BridgeView'));
 
 // ========== USDG PAYMENT CONFIG (Robinhood Chain) ==========
 // USDG (Global Dollar) is the canonical stablecoin on Robinhood Chain. 6 decimals, same as USDC.
@@ -142,7 +142,6 @@ const PyramidMemeEmpireV5 = () => {
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showPhantomNotice, setShowPhantomNotice] = useState(false);
-  const [showGetFunds, setShowGetFunds] = useState(false);
   const [availableWallets, setAvailableWallets] = useState([]);
   const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
   const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
@@ -1305,7 +1304,7 @@ const PyramidMemeEmpireV5 = () => {
 
       // Handle insufficient USDG — open Get Funds so the user can bridge in
       if (error.message?.includes('Insufficient USDG')) {
-        setShowGetFunds(true);
+        setCurrentTab('bridge');
         return { success: false, error: error.message };
       }
 
@@ -2227,13 +2226,6 @@ const PyramidMemeEmpireV5 = () => {
               </button>
             </div>
           </div>
-        )}
-
-        {/* Get Funds (LI.FI bridge widget) */}
-        {showGetFunds && (
-          <Suspense fallback={null}>
-            <GetFundsModal onClose={() => setShowGetFunds(false)} />
-          </Suspense>
         )}
 
         {/* Boost Purchase Confirmation Modal */}
@@ -3280,7 +3272,7 @@ const PyramidMemeEmpireV5 = () => {
 
                 {/* Get Funds — bridge USDG/ETH onto Robinhood Chain */}
                 <button
-                  onClick={() => setShowGetFunds(true)}
+                  onClick={() => setCurrentTab('bridge')}
                   style={{
                     width: '100%',
                     padding: '12px 14px',
@@ -3299,7 +3291,7 @@ const PyramidMemeEmpireV5 = () => {
                     gap: 8,
                   }}
                 >
-                  💸 GET FUNDS — Bridge USDG to Robinhood Chain
+                  💸 GET FUNDS — Bridge & Swap
                 </button>
 
                 {/* Battle Pass - Featured */}
@@ -3456,6 +3448,15 @@ const PyramidMemeEmpireV5 = () => {
             </div>
           )}
 
+          {/* BRIDGE / SWAP TAB */}
+          {currentTab === 'bridge' && (
+            <div className="bridge-view" style={{ height: '100%', overflow: 'hidden' }}>
+              <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 11 }}>Loading bridge…</div>}>
+                <BridgeView />
+              </Suspense>
+            </div>
+          )}
+
           {/* REFERRALS TAB */}
           {currentTab === 'referrals' && (
             <div className="referrals-view">
@@ -3570,7 +3571,14 @@ const PyramidMemeEmpireV5 = () => {
             <ShoppingBag size={22} />
             <span>SHOP</span>
           </button>
-          <button 
+          <button
+            className={`nav-btn ${currentTab === 'bridge' ? 'nav-btn-active' : ''}`}
+            onClick={() => { setCurrentTab('bridge'); playWhoosh(); }}
+          >
+            <ArrowLeftRight size={22} />
+            <span>BRIDGE</span>
+          </button>
+          <button
             className={`nav-btn ${currentTab === 'referrals' ? 'nav-btn-active' : ''}`}
             onClick={() => { setCurrentTab('referrals'); playWhoosh(); }}
           >
