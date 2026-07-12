@@ -88,25 +88,27 @@ router.post('/purchase',
     const userWallet = req.user.wallet_address;
 
     try {
-      // 1. Anti-replay: check if txHash already used
+      // 1. Anti-replay: block reuse only if this payment was already consumed
+      //    ('confirmed' = item granted, 'refund_pending' = money owed back).
+      //    A prior 'failed'/'pending' record (e.g. a transient RPC hiccup) is retryable.
       const existingTx = await Transaction.findByTxHash(txHash);
-      if (existingTx) {
+      if (existingTx && ['confirmed', 'refund_pending'].includes(existingTx.status)) {
         return res.status(409).json({ error: 'Transaction already used' });
       }
 
-      // 2. Create pending transaction record
-      const transaction = await Transaction.create(
-        userId,
-        txHash,
-        'purchase',
-        item.price,
-        itemId
-      );
+      // 2. Create (or reset) the pending record. tx_hash is UNIQUE, so on retry we
+      //    reset the existing row to 'pending' instead of inserting a duplicate.
+      if (existingTx) {
+        await Transaction.updateStatus(txHash, 'pending');
+      } else {
+        await Transaction.create(userId, txHash, 'purchase', item.price, itemId);
+      }
 
       // 3. Verify payment on-chain with PaymentService
       const verification = await paymentService.verifyPayment(txHash, userWallet, itemId);
 
       if (!verification.valid) {
+        // Transient/failed verification: mark 'failed' so the user can retry the same tx.
         await Transaction.updateStatus(txHash, 'failed');
         return res.status(400).json({
           error: 'Payment verification failed',
@@ -114,21 +116,17 @@ router.post('/purchase',
         });
       }
 
-      // 4. Update transaction with on-chain details
-      await Transaction.updateStatus(txHash, 'confirmed');
-      await Transaction.updateOnChainDetails(txHash, {
-        chain_id: Number(process.env.CHAIN_ID) || 4663, // Robinhood Chain
-        block_number: verification.details.blockNumber
-      });
-
-      // 5. Apply purchase based on item type
+      // 4. Payment is verified and the money is spent. Do NOT confirm yet — eligibility
+      //    is checked below. If we reject from here on, mark 'refund_pending' (never
+      //    silently keep the funds). Confirm only after the item is actually applied.
       let result = {};
 
       switch (item.type) {
         case 'battle_pass': {
           const hasBattlePass = await User.checkBattlePass(userId);
           if (hasBattlePass) {
-            return res.status(400).json({ error: 'You already have an active Battle Pass!' });
+            await Transaction.updateStatus(txHash, 'refund_pending');
+            return res.status(400).json({ error: 'You already have an active Battle Pass!', refundPending: true });
           }
 
           const battlePassUser = await User.setBattlePass(userId);
@@ -156,7 +154,8 @@ router.post('/purchase',
 
         case 'subscription': {
           if (req.user.is_premium) {
-            return res.status(400).json({ error: 'You already have Premium!' });
+            await Transaction.updateStatus(txHash, 'refund_pending');
+            return res.status(400).json({ error: 'You already have Premium!', refundPending: true });
           }
 
           await User.setPremium(userId);
@@ -181,8 +180,10 @@ router.post('/purchase',
           const currentMultiplier = currentBoostActive ? parseFloat(progress.boost_multiplier) : 1;
 
           if (item.multiplier < currentMultiplier) {
+            await Transaction.updateStatus(txHash, 'refund_pending');
             return res.status(400).json({
-              error: `Cannot downgrade: You already have X${currentMultiplier} boost active`
+              error: `Cannot downgrade: You already have X${currentMultiplier} boost active`,
+              refundPending: true
             });
           }
 
@@ -203,7 +204,8 @@ router.post('/purchase',
           if (itemId === 'energy_refill') {
             const userHasBattlePass = await User.checkBattlePass(userId);
             if (req.user.is_premium || userHasBattlePass) {
-              return res.status(400).json({ error: 'Premium/Battle Pass users have unlimited energy!' });
+              await Transaction.updateStatus(txHash, 'refund_pending');
+              return res.status(400).json({ error: 'Premium/Battle Pass users have unlimited energy!', refundPending: true });
             }
 
             const newEnergy = await GameProgress.regenerateEnergy(userId, 100);
@@ -217,7 +219,13 @@ router.post('/purchase',
         }
       }
 
-      // 6. Success response
+      // 6. Item applied successfully — now confirm the transaction and record on-chain details.
+      await Transaction.updateStatus(txHash, 'confirmed');
+      await Transaction.updateOnChainDetails(txHash, {
+        chain_id: Number(process.env.CHAIN_ID) || 4663, // Robinhood Chain
+        block_number: verification.details.blockNumber
+      });
+
       console.log(`[Shop] Purchase completed: ${itemId} by user ${userId} | tx: ${txHash}`);
 
       res.json({
