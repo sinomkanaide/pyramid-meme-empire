@@ -1,21 +1,21 @@
 // Web3 Utilities for TAPKAMUN.FUN
 // Handles wallet connections, contract interactions, and USDC payments
 
-// Base Network Configuration
+// Robinhood Chain Configuration (Arbitrum Orbit L2, EVM-compatible)
 export const BASE_NETWORK = {
-  chainId: '0x2105', // 8453 in hex
-  chainName: 'Base',
+  chainId: '0x1237', // 4663 in hex
+  chainName: 'Robinhood Chain',
   nativeCurrency: {
     name: 'Ethereum',
     symbol: 'ETH',
     decimals: 18
   },
-  rpcUrls: ['https://mainnet.base.org'],
-  blockExplorerUrls: ['https://basescan.org']
+  rpcUrls: ['https://rpc.mainnet.chain.robinhood.com'],
+  blockExplorerUrls: ['https://robinhoodchain.blockscout.com']
 };
 
-// USDC on Base Network
-export const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+// USDG (Global Dollar) on Robinhood Chain — 6 decimals, same as USDC
+export const USDC_ADDRESS = '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168';
 
 // Contract addresses (update after deployment)
 export const PAYMENT_CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000'; // TO BE DEPLOYED

@@ -1,11 +1,11 @@
 const { ethers } = require('ethers');
 
-// USDC ERC-20 ABI (only what we need)
+// USDG ERC-20 ABI (only what we need)
 const USDC_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
 
-// Prices in USDC (6 decimals) - matching shop item IDs
+// Prices in USDG (6 decimals, same as USDC) - matching shop item IDs
 const PRICES = {
   premium: 2000000,       // $2.00
   boost_2x: 500000,       // $0.50
@@ -16,8 +16,9 @@ const PRICES = {
 
 class PaymentService {
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL || 'https://mainnet.base.org');
-    this.usdcAddress = (process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913').toLowerCase();
+    // Robinhood Chain (chain 4663). New env names preferred; old BASE_*/USDC_* names kept for backward compat.
+    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.BASE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com');
+    this.usdcAddress = (process.env.USDG_CONTRACT_ADDRESS || process.env.USDC_CONTRACT_ADDRESS || '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168').toLowerCase();
     this.shopWallet = (process.env.SHOP_WALLET_ADDRESS || '').toLowerCase();
   }
 

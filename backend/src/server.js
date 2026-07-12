@@ -116,8 +116,10 @@ app.use((err, req, res, next) => {
 const runMigrations = async () => {
   const db = require('./config/database');
   const migrations = [
-    'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS chain_id INTEGER DEFAULT 8453',
+    'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS chain_id INTEGER DEFAULT 4663',
     'ALTER TABLE transactions ADD COLUMN IF NOT EXISTS block_number BIGINT',
+    // Migrated Base -> Robinhood Chain: new purchases pay in USDG. Historical rows keep their real values.
+    "ALTER TABLE transactions ALTER COLUMN currency SET DEFAULT 'USDG'",
     'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_multiplier DECIMAL(4,2) DEFAULT 1.0',
     'ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_expires_at TIMESTAMP WITH TIME ZONE',
     `INSERT INTO quests (title, description, icon, quest_type, requirement_type, requirement_value, requirement_metadata, reward_type, is_reward_hidden, sort_order)

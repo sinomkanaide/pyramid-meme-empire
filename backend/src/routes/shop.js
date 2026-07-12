@@ -72,7 +72,7 @@ router.get('/items', (req, res) => {
   res.json({ items });
 });
 
-// POST /shop/purchase - Real USDC purchase with on-chain verification
+// POST /shop/purchase - Real USDG purchase with on-chain verification
 router.post('/purchase',
   body('itemId').isString().isIn(Object.keys(SHOP_ITEMS)),
   body('txHash').isString().isLength({ min: 66, max: 66 }),
@@ -117,7 +117,7 @@ router.post('/purchase',
       // 4. Update transaction with on-chain details
       await Transaction.updateStatus(txHash, 'confirmed');
       await Transaction.updateOnChainDetails(txHash, {
-        chain_id: 8453,
+        chain_id: Number(process.env.CHAIN_ID) || 4663, // Robinhood Chain
         block_number: verification.details.blockNumber
       });
 
@@ -240,7 +240,7 @@ router.post('/activate',
   body('itemId').isString().isIn(Object.keys(SHOP_ITEMS)),
   async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({ error: 'Demo mode disabled in production. Use /purchase with real USDC payment.' });
+      return res.status(403).json({ error: 'Demo mode disabled in production. Use /purchase with real USDG payment.' });
     }
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

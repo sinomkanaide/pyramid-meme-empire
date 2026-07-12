@@ -63,7 +63,7 @@ class Transaction {
   // Verify transaction on-chain
   static async verifyOnChain(txHash) {
     try {
-      const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.BASE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com');
       const receipt = await provider.getTransactionReceipt(txHash);
 
       if (!receipt) {
@@ -91,27 +91,30 @@ class Transaction {
     }
   }
 
-  // Verify USDC transfer
+  // Verify USDG transfer
   static async verifyUSDCTransfer(txHash, expectedAmount, expectedTo) {
     try {
-      const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.BASE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com');
       const receipt = await provider.getTransactionReceipt(txHash);
 
       if (!receipt || receipt.status === 0) {
         return { verified: false, reason: 'Transaction failed or not found' };
       }
 
-      // USDC Transfer event signature
+      // USDG Transfer event signature
       const transferTopic = ethers.id('Transfer(address,address,uint256)');
+
+      // Token contract (Robinhood Chain USDG). New env name preferred; old USDC_* kept for compat.
+      const tokenAddress = (process.env.USDG_CONTRACT_ADDRESS || process.env.USDC_CONTRACT_ADDRESS || '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168').toLowerCase();
 
       // Find Transfer event in logs
       const transferLog = receipt.logs.find(log =>
         log.topics[0] === transferTopic &&
-        log.address.toLowerCase() === process.env.USDC_CONTRACT_ADDRESS.toLowerCase()
+        log.address.toLowerCase() === tokenAddress
       );
 
       if (!transferLog) {
-        return { verified: false, reason: 'USDC transfer not found in transaction' };
+        return { verified: false, reason: 'USDG transfer not found in transaction' };
       }
 
       // Decode transfer event

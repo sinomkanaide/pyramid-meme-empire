@@ -129,7 +129,7 @@ const createInlineSchema = async (client) => {
       tx_hash VARCHAR(66) UNIQUE NOT NULL,
       type VARCHAR(30) NOT NULL,
       amount DECIMAL(18, 6) NOT NULL,
-      currency VARCHAR(10) DEFAULT 'USDC',
+      currency VARCHAR(10) DEFAULT 'USDG',
       status VARCHAR(20) DEFAULT 'pending',
       item_purchased VARCHAR(50),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     -- Transaction Details
     type VARCHAR(30) NOT NULL, -- 'premium', 'battle_pass', 'boost_x2', 'boost_x5', 'energy_refill'
     amount DECIMAL(18, 6) NOT NULL,
-    currency VARCHAR(10) DEFAULT 'USDC',
+    currency VARCHAR(10) DEFAULT 'USDG',
 
     -- Item Purchased
     item_id INTEGER,
