@@ -127,6 +127,37 @@ class GameProgress {
     };
   }
 
+  // Add bricks (XP) from an external action such as a bridge/swap trade.
+  // Recalculates level with the free-user cap applied. No energy/cooldown.
+  static async addBricks(userId, amount, isPremium = false, hasBattlePass = false) {
+    const progress = await this.findByUserId(userId);
+    if (!progress) {
+      throw new Error('Game progress not found');
+    }
+
+    const newBricks = progress.bricks + amount;
+    const calculatedLevel = calculateLevelFromXp(newBricks);
+    const newLevel = applyLevelCap(calculatedLevel, isPremium, hasBattlePass);
+
+    const result = await db.query(
+      `UPDATE game_progress
+       SET bricks = $1,
+           level = $2,
+           total_bricks_earned = total_bricks_earned + $3,
+           updated_at = NOW()
+       WHERE user_id = $4
+       RETURNING *`,
+      [newBricks, newLevel, amount, userId]
+    );
+
+    const updated = result.rows[0];
+    return {
+      ...updated,
+      leveledUp: newLevel > progress.level,
+      xpProgress: getXpProgress(newBricks, newLevel)
+    };
+  }
+
   // Get quest bonus multiplier (check expiry)
   static async getQuestBonus(userId) {
     const progress = await this.findByUserId(userId);

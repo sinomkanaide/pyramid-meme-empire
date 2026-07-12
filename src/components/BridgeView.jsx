@@ -1,5 +1,13 @@
-import { LiFiWidget } from '@lifi/widget';
+import { useEffect, useRef } from 'react';
+import { LiFiWidget, widgetEvents, WidgetEvent } from '@lifi/widget';
 import { EthereumProvider } from '@lifi/widget-provider-ethereum';
+
+// Pull the first on-chain tx hash (the sending tx) out of a completed route.
+// LI.FI's /status traces the whole route from this hash.
+function getRouteTxHash(route) {
+  const processes = (route?.steps || []).flatMap((s) => s?.execution?.process || []);
+  return processes.map((p) => p?.txHash).filter(Boolean)[0] || null;
+}
 
 // Robinhood Chain (4663). Native = ETH (gas); USDG = the pay token.
 const NATIVE_ETH = '0x0000000000000000000000000000000000000000';
@@ -27,7 +35,28 @@ const widgetConfig = {
   },
 };
 
-export default function BridgeView() {
+export default function BridgeView({ onTrade }) {
+  // Always call the latest onTrade without re-subscribing on every render.
+  const onTradeRef = useRef(onTrade);
+  onTradeRef.current = onTrade;
+
+  // Award trade XP when a bridge/swap completes. widgetEvents is a global
+  // singleton emitter, so subscribing here (outside the widget tree) works.
+  useEffect(() => {
+    const handleCompleted = (route) => {
+      const txHash = getRouteTxHash(route);
+      if (txHash) {
+        onTradeRef.current?.({
+          txHash,
+          fromChain: route?.fromChainId,
+          toChain: route?.toChainId,
+        });
+      }
+    };
+    widgetEvents.on(WidgetEvent.RouteExecutionCompleted, handleCompleted);
+    return () => widgetEvents.off(WidgetEvent.RouteExecutionCompleted, handleCompleted);
+  }, []);
+
   return (
     <div style={{ padding: '10px 10px 96px', height: '100%', overflowY: 'auto' }}>
       <div style={{ textAlign: 'center', marginBottom: 12 }}>

@@ -515,6 +515,27 @@ const PyramidMemeEmpireV5 = () => {
     }
   };
 
+  // Award XP when a bridge/swap completes in the Bridge tab (verified server-side).
+  const handleTradeXp = async ({ txHash, fromChain, toChain }) => {
+    try {
+      const result = await apiCall('/api/game/trade-xp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash, fromChain, toChain })
+      });
+      if (result?.xpAwarded > 0) {
+        if (typeof result.bricks === 'number') { setBricks(result.bricks); setDisplayBricks(result.bricks); }
+        if (typeof result.level === 'number') setLevel(result.level);
+        showNotification(`🎉 +${result.xpAwarded} XP from your trade!`);
+      } else if (result?.dailyCapReached) {
+        showNotification('Daily trade XP cap reached — back tomorrow!');
+      }
+    } catch (err) {
+      // Non-fatal: already claimed / not verified yet / below minimum.
+      console.log('[TradeXP]', err?.message || err);
+    }
+  };
+
   // Load progress from backend
   const loadProgress = async () => {
     try {
@@ -3452,7 +3473,7 @@ const PyramidMemeEmpireV5 = () => {
           {currentTab === 'bridge' && (
             <div className="bridge-view" style={{ height: '100%', overflow: 'hidden' }}>
               <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 11 }}>Loading bridge…</div>}>
-                <BridgeView />
+                <BridgeView onTrade={handleTradeXp} />
               </Suspense>
             </div>
           )}
