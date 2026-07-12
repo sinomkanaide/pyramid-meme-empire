@@ -1,11 +1,11 @@
 const { ethers } = require('ethers');
 
-// USDC ERC-20 ABI (only what we need)
-const USDC_ABI = [
+// USDG ERC-20 ABI (only what we need)
+const USDG_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
 
-// Prices in USDC (6 decimals) - matching shop item IDs
+// Prices in USDG (6 decimals, same as USDC) - matching shop item IDs
 const PRICES = {
   premium: 2000000,       // $2.00
   boost_2x: 500000,       // $0.50
@@ -16,13 +16,30 @@ const PRICES = {
 
 class PaymentService {
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL || 'https://mainnet.base.org');
-    this.usdcAddress = (process.env.USDC_CONTRACT_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913').toLowerCase();
+    // Robinhood Chain (chain 4663). New env names preferred; old BASE_*/USDC_* names kept for backward compat.
+    this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL || process.env.BASE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com');
+    this.usdgAddress = (process.env.USDG_CONTRACT_ADDRESS || process.env.USDC_CONTRACT_ADDRESS || '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168').toLowerCase();
     this.shopWallet = (process.env.SHOP_WALLET_ADDRESS || '').toLowerCase();
+    this.expectedChainId = BigInt(process.env.CHAIN_ID || 4663); // Robinhood Chain
+    this._chainVerified = false;
   }
 
   /**
-   * Verify a USDC payment transaction on-chain
+   * Assert the configured RPC is actually on the expected chain (4663).
+   * Guards against a misconfigured RPC (e.g. a leftover Base URL) silently
+   * validating transfers from the wrong network. Checked once, then cached.
+   */
+  async ensureCorrectChain() {
+    if (this._chainVerified) return;
+    const network = await this.provider.getNetwork();
+    if (network.chainId !== this.expectedChainId) {
+      throw new Error(`RPC chain mismatch: expected ${this.expectedChainId}, RPC reports ${network.chainId}. Check RPC_URL / CHAIN_ID env vars.`);
+    }
+    this._chainVerified = true;
+  }
+
+  /**
+   * Verify a USDG payment transaction on-chain
    * @param {string} txHash - Transaction hash
    * @param {string} expectedSender - Buyer's wallet address
    * @param {string} itemType - Item type (premium, boost_2x, etc.)
@@ -30,6 +47,9 @@ class PaymentService {
    */
   async verifyPayment(txHash, expectedSender, itemType) {
     try {
+      // 0. Ensure the RPC is on the expected chain before trusting any receipt.
+      await this.ensureCorrectChain();
+
       // 1. Get transaction receipt
       const receipt = await this.provider.getTransactionReceipt(txHash);
 
@@ -57,17 +77,17 @@ class PaymentService {
         return { valid: false, error: `Only ${confirmations} confirmations, need at least 1` };
       }
 
-      // 4. Verify tx is to the USDC contract
-      if (receipt.to?.toLowerCase() !== this.usdcAddress) {
-        return { valid: false, error: 'Transaction is not a USDC transfer' };
+      // 4. Verify tx is to the USDG contract
+      if (receipt.to?.toLowerCase() !== this.usdgAddress) {
+        return { valid: false, error: 'Transaction is not a USDG transfer' };
       }
 
       // 5. Parse logs to find Transfer event
-      const usdcContract = new ethers.Contract(this.usdcAddress, USDC_ABI, this.provider);
+      const usdgContract = new ethers.Contract(this.usdgAddress, USDG_ABI, this.provider);
       const transferEvent = receipt.logs
         .map(log => {
           try {
-            return usdcContract.interface.parseLog({ topics: log.topics, data: log.data });
+            return usdgContract.interface.parseLog({ topics: log.topics, data: log.data });
           } catch {
             return null;
           }
@@ -75,7 +95,7 @@ class PaymentService {
         .find(parsed => parsed && parsed.name === 'Transfer');
 
       if (!transferEvent) {
-        return { valid: false, error: 'No USDC Transfer event found in transaction' };
+        return { valid: false, error: 'No USDG Transfer event found in transaction' };
       }
 
       const { from, to, value } = transferEvent.args;
@@ -101,7 +121,7 @@ class PaymentService {
       }
 
       // 9. All verified
-      console.log(`[PaymentService] Payment verified: ${txHash} | ${itemType} | ${from} -> ${to} | ${Number(value)} USDC units`);
+      console.log(`[PaymentService] Payment verified: ${txHash} | ${itemType} | ${from} -> ${to} | ${Number(value)} USDG units`);
 
       return {
         valid: true,

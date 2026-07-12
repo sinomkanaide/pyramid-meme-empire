@@ -43,22 +43,22 @@ export function useWalletAuth() {
       });
       const walletAddress = accounts[0];
 
-      // Switch to Base network
+      // Switch to Robinhood Chain
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x2105' }], // Base mainnet
+          params: [{ chainId: '0x1237' }], // Robinhood Chain mainnet (4663)
         });
       } catch (switchError) {
         if (switchError.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
-              chainId: '0x2105',
-              chainName: 'Base',
+              chainId: '0x1237',
+              chainName: 'Robinhood Chain',
               nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-              rpcUrls: ['https://mainnet.base.org'],
-              blockExplorerUrls: ['https://basescan.org']
+              rpcUrls: ['https://rpc.mainnet.chain.robinhood.com'],
+              blockExplorerUrls: ['https://robinhoodchain.blockscout.com']
             }]
           });
         }

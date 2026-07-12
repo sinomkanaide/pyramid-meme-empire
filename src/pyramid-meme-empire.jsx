@@ -2,17 +2,19 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
 import { ethers } from 'ethers';
 
-// ========== USDC PAYMENT CONFIG (Base Network) ==========
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+// ========== USDG PAYMENT CONFIG (Robinhood Chain) ==========
+// USDG (Global Dollar) is the canonical stablecoin on Robinhood Chain. 6 decimals, same as USDC.
+const USDG_ADDRESS = '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168';
 const SHOP_WALLET = '0x323fF56B329F2bD3680007f8E6c4D9d48c7f3027';
-const BASE_CHAIN_ID = 8453;
+const RH_CHAIN_ID = 4663;
+const RH_CHAIN_ID_HEX = '0x1237';
 
-const USDC_ABI = [
+const USDG_ABI = [
   'function transfer(address to, uint256 amount) returns (bool)',
   'function balanceOf(address owner) view returns (uint256)',
 ];
 
-const USDC_PRICES = {
+const USDG_PRICES = {
   premium: 2000000n,       // $2.00
   boost_2x: 500000n,       // $0.50
   boost_5x: 1500000n,      // $1.50
@@ -369,11 +371,11 @@ const PyramidMemeEmpireV5 = () => {
         return;
       }
 
-      // Switch to Base network
+      // Switch to Robinhood Chain
       try {
         await provider.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x2105' }],
+          params: [{ chainId: RH_CHAIN_ID_HEX }],
         });
       } catch (switchError) {
         if (switchError.code === 4902 || switchError.message?.includes('Unrecognized chain')) {
@@ -381,15 +383,15 @@ const PyramidMemeEmpireV5 = () => {
             await provider.request({
               method: 'wallet_addEthereumChain',
               params: [{
-                chainId: '0x2105',
-                chainName: 'Base',
+                chainId: RH_CHAIN_ID_HEX,
+                chainName: 'Robinhood Chain',
                 nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-                rpcUrls: ['https://mainnet.base.org'],
-                blockExplorerUrls: ['https://basescan.org']
+                rpcUrls: ['https://rpc.mainnet.chain.robinhood.com'],
+                blockExplorerUrls: ['https://robinhoodchain.blockscout.com']
               }]
             });
           } catch (addError) {
-            showNotification('❌ ADD BASE NETWORK IN WALLET');
+            showNotification('❌ ADD ROBINHOOD CHAIN IN WALLET');
             console.error('Add chain error:', addError);
             return;
           }
@@ -1174,7 +1176,7 @@ const PyramidMemeEmpireV5 = () => {
     }
   }, []);
 
-  // ========== USDC PAYMENT FUNCTION ==========
+  // ========== USDG PAYMENT FUNCTION ==========
   // Uses raw eth_sendTransaction WITHOUT gas field for universal wallet compatibility.
   // Phantom rejects transactions with explicit gas; this lets the wallet estimate gas itself.
   const purchaseItem = async (itemType) => {
@@ -1189,42 +1191,42 @@ const PyramidMemeEmpireV5 = () => {
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
-      // 2. Ensure we're on Base Network
+      // 2. Ensure we're on Robinhood Chain
       const network = await provider.getNetwork();
-      if (Number(network.chainId) !== BASE_CHAIN_ID) {
+      if (Number(network.chainId) !== RH_CHAIN_ID) {
         try {
           await walletProvider.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x2105' }]
+            params: [{ chainId: RH_CHAIN_ID_HEX }]
           });
         } catch (switchError) {
           if (switchError.code === 4902) {
             await walletProvider.request({
               method: 'wallet_addEthereumChain',
               params: [{
-                chainId: '0x2105',
-                chainName: 'Base',
+                chainId: RH_CHAIN_ID_HEX,
+                chainName: 'Robinhood Chain',
                 nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-                rpcUrls: ['https://mainnet.base.org'],
-                blockExplorerUrls: ['https://basescan.org']
+                rpcUrls: ['https://rpc.mainnet.chain.robinhood.com'],
+                blockExplorerUrls: ['https://robinhoodchain.blockscout.com']
               }]
             });
           } else {
-            throw new Error('Please switch to Base Network');
+            throw new Error('Please switch to Robinhood Chain');
           }
         }
         // Re-create provider after chain switch
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      // 3. Check USDC balance
-      const usdcRead = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
-      const balance = await usdcRead.balanceOf(userAddress);
-      const price = USDC_PRICES[itemType];
+      // 3. Check USDG balance
+      const usdgRead = new ethers.Contract(USDG_ADDRESS, USDG_ABI, provider);
+      const balance = await usdgRead.balanceOf(userAddress);
+      const price = USDG_PRICES[itemType];
 
       if (balance < price) {
         const balanceFormatted = (Number(balance) / 1e6).toFixed(2);
-        throw new Error(`Insufficient USDC balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
+        throw new Error(`Insufficient USDG balance. You have $${balanceFormatted}, need ${PRICE_LABELS[itemType]}`);
       }
 
       // 4. Encode transfer calldata manually
@@ -1237,7 +1239,7 @@ const PyramidMemeEmpireV5 = () => {
         method: 'eth_sendTransaction',
         params: [{
           from: userAddress,
-          to: USDC_ADDRESS,
+          to: USDG_ADDRESS,
           data: data
         }]
       });
@@ -1282,11 +1284,11 @@ const PyramidMemeEmpireV5 = () => {
 
       // Handle insufficient gas (ETH for gas fees)
       if (error.message?.includes('insufficient funds for gas') || error.code === 'INSUFFICIENT_FUNDS') {
-        return { success: false, error: 'Not enough ETH for gas fees. You need a small amount of ETH on Base.' };
+        return { success: false, error: 'Not enough ETH for gas fees. You need a small amount of ETH on Robinhood Chain.' };
       }
 
-      // Handle insufficient USDC
-      if (error.message?.includes('Insufficient USDC')) {
+      // Handle insufficient USDG
+      if (error.message?.includes('Insufficient USDG')) {
         return { success: false, error: error.message };
       }
 
@@ -2285,7 +2287,7 @@ const PyramidMemeEmpireV5 = () => {
                   : purchaseStatus === 'done' ? 'DONE!'
                   : purchaseStatus === 'error' ? 'FAILED'
                   : 'PROCESSING...'
-                  : `ACTIVATE BOOST - ${selectedBoost === 'boost_5x' ? '$1.50' : '$0.50'} USDC`
+                  : `ACTIVATE BOOST - ${selectedBoost === 'boost_5x' ? '$1.50' : '$0.50'} USDG`
                 }
               </button>
 
@@ -2295,7 +2297,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Pays with USDC on Base Network
+                Pays with USDG on Robinhood Chain
               </div>
             </div>
           </div>
@@ -2426,7 +2428,7 @@ const PyramidMemeEmpireV5 = () => {
                   : purchaseStatus === 'done' ? 'DONE!'
                   : purchaseStatus === 'error' ? 'FAILED'
                   : 'PROCESSING...'
-                  : 'REFILL ENERGY - $0.25 USDC'
+                  : 'REFILL ENERGY - $0.25 USDG'
                 }
               </button>
 
@@ -2436,7 +2438,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Pays with USDC on Base Network
+                Pays with USDG on Robinhood Chain
               </div>
             </div>
           </div>
@@ -2573,7 +2575,7 @@ const PyramidMemeEmpireV5 = () => {
                   : purchaseStatus === 'done' ? 'DONE!'
                   : purchaseStatus === 'error' ? 'FAILED'
                   : 'PROCESSING...'
-                  : 'ACTIVATE PREMIUM - $2.00 USDC'
+                  : 'ACTIVATE PREMIUM - $2.00 USDG'
                 }
               </button>
 
@@ -2583,7 +2585,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Pays with USDC on Base Network
+                Pays with USDG on Robinhood Chain
               </div>
             </div>
           </div>
@@ -2729,7 +2731,7 @@ const PyramidMemeEmpireV5 = () => {
                   : purchaseStatus === 'done' ? 'DONE!'
                   : purchaseStatus === 'error' ? 'FAILED'
                   : 'PROCESSING...'
-                  : 'GET BATTLE PASS - $5.00 USDC'
+                  : 'GET BATTLE PASS - $5.00 USDG'
                 }
               </button>
 
@@ -2739,7 +2741,7 @@ const PyramidMemeEmpireV5 = () => {
                 color: '#666',
                 fontFamily: 'inherit',
               }}>
-                Pays with USDC on Base Network
+                Pays with USDG on Robinhood Chain
               </div>
             </div>
           </div>
@@ -2935,7 +2937,7 @@ const PyramidMemeEmpireV5 = () => {
                       BATTLE PASS REQUIRED
                     </h3>
                     <p style={{ color: '#888', fontSize: 10, marginBottom: 16 }}>
-                      Get Battle Pass to compete in the Arena and win USDC rewards!
+                      Get Battle Pass to compete in the Arena and win USDG rewards!
                     </p>
                     <button
                       onClick={() => setShowBattlePassModal(true)}
@@ -2950,7 +2952,7 @@ const PyramidMemeEmpireV5 = () => {
               <div className="arena-scroll">
                 <h2 className="arena-title">🏆 TAP ARENA</h2>
                 <p className="arena-subtitle">
-                  {hasBattlePass ? 'Compete for USDC prizes!' : 'Battle Pass Required'}
+                  {hasBattlePass ? 'Compete for USDG prizes!' : 'Battle Pass Required'}
                 </p>
 
                 {/* Battle Pass Badge for BP users */}
@@ -3002,8 +3004,8 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
 
                 <div className="arena-info">
-                  <p>💰 Top 10 compete for $1,000 USDC prizes</p>
-                  <p>🏆 Top 100 compete for $1,000 USDC</p>
+                  <p>💰 Top 10 compete for $1,000 USDG prizes</p>
+                  <p>🏆 Top 100 compete for $1,000 USDG</p>
                 </div>
               </div>
             </div>

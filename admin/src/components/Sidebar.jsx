@@ -27,6 +27,10 @@ export default function Sidebar({ wallet, onLogout }) {
           <span className="sidebar-icon">🏆</span>
           Leaderboard
         </NavLink>
+        <NavLink to="/refunds" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+          <span className="sidebar-icon">💸</span>
+          Refunds
+        </NavLink>
       </nav>
 
       <div className="sidebar-footer">
