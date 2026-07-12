@@ -135,6 +135,60 @@ router.post('/login', async (req, res) => {
 router.use(adminAuth);
 
 // ============================================================================
+// REFUNDS - manual refund queue
+// Transactions where the user paid on-chain but the item was NOT granted
+// (already owned it / can't downgrade / unlimited energy). On-chain transfers
+// are irreversible, so these are refunded MANUALLY: send USDG back from the
+// shop wallet to the user's wallet_address, then mark the row resolved here.
+// ============================================================================
+
+// GET /admin/refunds - list pending manual refunds
+router.get('/refunds', async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT t.id, t.tx_hash, t.amount, t.currency, t.item_name, t.type,
+             t.status, t.chain_id, t.created_at,
+             u.wallet_address, u.username
+      FROM transactions t
+      JOIN users u ON u.id = t.user_id
+      WHERE t.status = 'refund_pending'
+      ORDER BY t.created_at DESC
+    `);
+    res.json({ refunds: result.rows });
+  } catch (error) {
+    console.error('[Admin:Refunds] List error:', error.message);
+    res.status(500).json({ error: 'Failed to load refunds' });
+  }
+});
+
+// POST /admin/refunds/:txHash/resolve - mark a refund as manually paid back.
+// Optional body { refundTxHash } records the on-chain refund tx for the log.
+router.post('/refunds/:txHash/resolve', async (req, res) => {
+  try {
+    const txHash = String(req.params.txHash || '').toLowerCase();
+    const refundTxHash = req.body && req.body.refundTxHash ? String(req.body.refundTxHash) : null;
+
+    const result = await db.query(
+      `UPDATE transactions
+       SET status = 'refunded'
+       WHERE tx_hash = $1 AND status = 'refund_pending'
+       RETURNING id, tx_hash, status`,
+      [txHash]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No refund_pending transaction with that hash' });
+    }
+
+    console.log(`[Admin:Refunds] Marked refunded: ${txHash}${refundTxHash ? ' | refundTx: ' + refundTxHash : ''} | by ${req.admin?.walletAddress || 'admin'}`);
+    res.json({ success: true, transaction: result.rows[0] });
+  } catch (error) {
+    console.error('[Admin:Refunds] Resolve error:', error.message);
+    res.status(500).json({ error: 'Failed to resolve refund' });
+  }
+});
+
+// ============================================================================
 // ANALYTICS - OVERVIEW
 // ============================================================================
 

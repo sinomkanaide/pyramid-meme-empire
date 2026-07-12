@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard'
 import QuestManager from './components/QuestManager'
 import UserManager from './components/UserManager'
 import LeaderboardManager from './components/LeaderboardManager'
+import RefundsManager from './components/RefundsManager'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.tapkamun.fun'
 
@@ -61,6 +62,7 @@ function App() {
           <Route path="/quests" element={<QuestManager apiCall={apiCall} />} />
           <Route path="/users" element={<UserManager apiCall={apiCall} />} />
           <Route path="/leaderboard" element={<LeaderboardManager apiCall={apiCall} />} />
+          <Route path="/refunds" element={<RefundsManager apiCall={apiCall} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
