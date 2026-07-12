@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X } from 'lucide-react';
 import { ethers } from 'ethers';
+
+// Lazy-loaded so the LI.FI widget (and its wagmi/viem deps) ship as a separate
+// chunk, loaded only when the user opens "Get Funds".
+const GetFundsModal = lazy(() => import('./components/GetFundsModal'));
 
 // ========== USDG PAYMENT CONFIG (Robinhood Chain) ==========
 // USDG (Global Dollar) is the canonical stablecoin on Robinhood Chain. 6 decimals, same as USDC.
@@ -138,6 +142,7 @@ const PyramidMemeEmpireV5 = () => {
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showPhantomNotice, setShowPhantomNotice] = useState(false);
+  const [showGetFunds, setShowGetFunds] = useState(false);
   const [availableWallets, setAvailableWallets] = useState([]);
   const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
   const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
@@ -1298,8 +1303,9 @@ const PyramidMemeEmpireV5 = () => {
         return { success: false, error: 'Not enough ETH for gas fees. You need a small amount of ETH on Robinhood Chain.' };
       }
 
-      // Handle insufficient USDG
+      // Handle insufficient USDG — open Get Funds so the user can bridge in
       if (error.message?.includes('Insufficient USDG')) {
+        setShowGetFunds(true);
         return { success: false, error: error.message };
       }
 
@@ -2221,6 +2227,13 @@ const PyramidMemeEmpireV5 = () => {
               </button>
             </div>
           </div>
+        )}
+
+        {/* Get Funds (LI.FI bridge widget) */}
+        {showGetFunds && (
+          <Suspense fallback={null}>
+            <GetFundsModal onClose={() => setShowGetFunds(false)} />
+          </Suspense>
         )}
 
         {/* Boost Purchase Confirmation Modal */}
@@ -3264,7 +3277,31 @@ const PyramidMemeEmpireV5 = () => {
           {currentTab === 'shop' && (
             <div className="shop-view">
               <div className="shop-scroll">
-                
+
+                {/* Get Funds — bridge USDG/ETH onto Robinhood Chain */}
+                <button
+                  onClick={() => setShowGetFunds(true)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    marginBottom: 12,
+                    background: 'linear-gradient(135deg, rgba(0,255,0,0.12), rgba(0,255,0,0.04))',
+                    border: '2px solid #00FF00',
+                    borderRadius: 12,
+                    color: '#00FF00',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  💸 GET FUNDS — Bridge USDG to Robinhood Chain
+                </button>
+
                 {/* Battle Pass - Featured */}
                 <div className={`featured-item ${hasBattlePass ? 'featured-item-active' : ''}`}>
                   <div className="item-header">
