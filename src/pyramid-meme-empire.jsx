@@ -137,6 +137,7 @@ const PyramidMemeEmpireV5 = () => {
   const [battlePassInfo, setBattlePassInfo] = useState(null);
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showPhantomNotice, setShowPhantomNotice] = useState(false);
   const [availableWallets, setAvailableWallets] = useState([]);
   const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
   const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
@@ -322,6 +323,16 @@ const PyramidMemeEmpireV5 = () => {
     setShowWalletModal(false);
     setIsConnecting(true);
     const { provider, name } = selectedProvider;
+
+    // Phantom keeps a curated EVM network list and does NOT allow adding custom
+    // chains, so it cannot use Robinhood Chain (4663). Tell the user clearly and
+    // point them to a compatible wallet instead of failing at the network switch.
+    if (name === 'Phantom' || provider?.isPhantom) {
+      setIsConnecting(false);
+      setShowPhantomNotice(true);
+      return;
+    }
+
     console.log(`Connecting with ${name}...`);
     try {
 
@@ -2145,6 +2156,68 @@ const PyramidMemeEmpireV5 = () => {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phantom Not Supported Notice */}
+        {showPhantomNotice && (
+          <div
+            onClick={() => setShowPhantomNotice(false)}
+            style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.95)',
+              zIndex: 10003,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                border: '3px solid #FFB020',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 360,
+                width: '100%',
+                boxShadow: '0 0 50px rgba(255,176,32,0.3)',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 40, marginBottom: 12 }}>👻</div>
+              <div style={{ fontSize: 15, color: '#FFB020', fontWeight: 'bold', fontFamily: 'inherit' }}>
+                PHANTOM NOT SUPPORTED
+              </div>
+              <div style={{ fontSize: 11, color: '#bbb', marginTop: 12, lineHeight: 1.6, fontFamily: 'inherit' }}>
+                Phantom doesn't support Robinhood Chain (it only allows a fixed list of networks).
+                Please connect with a wallet that supports custom networks:
+              </div>
+              <div style={{ fontSize: 12, color: '#fff', marginTop: 12, fontWeight: 'bold', fontFamily: 'inherit', lineHeight: 1.8 }}>
+                🦊 MetaMask · 🔵 Coinbase Wallet<br />
+                🐰 Rabby · 🛡️ Trust · 🦁 Brave
+              </div>
+              <button
+                onClick={() => setShowPhantomNotice(false)}
+                style={{
+                  width: '100%',
+                  padding: 14,
+                  marginTop: 22,
+                  background: 'linear-gradient(135deg, #FFB020, #ff8c00)',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 13,
+                  color: '#1a1a2e',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                GOT IT
               </button>
             </div>
           </div>
