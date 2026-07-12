@@ -7,8 +7,131 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+// ===== Trade XP (gamified bridges/swaps) config =====
+const TRADE_XP = {
+  BASE: 25,          // flat XP per verified trade
+  PER_USD: 1,        // + this much XP per $1 of trade volume
+  PER_TRADE_CAP: 250,// max volume-bonus XP from a single trade
+  DAILY_CAP: 500,    // max trade XP per user per day
+  MIN_USD: 1,        // ignore dust trades below this volume
+};
+
+// Dedupe table so a trade can only be claimed once. Auto-created on boot.
+async function initTradeXpTable() {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS trade_xp_claims (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        tx_hash VARCHAR(80) UNIQUE NOT NULL,
+        volume_usd NUMERIC(18,2) DEFAULT 0,
+        xp_awarded INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+  } catch (err) {
+    console.error('[TradeXP] table init error:', err.message);
+  }
+}
+initTradeXpTable();
+
 // All routes require authentication
 router.use(authenticateToken);
+
+// POST /game/trade-xp - award XP for a completed bridge/swap done via the LI.FI widget.
+// Trust model: we verify the trade server-side against LI.FI's /status (not the client),
+// and only credit the wallet that actually executed it.
+router.post('/trade-xp', async (req, res) => {
+  try {
+    const { txHash, fromChain, toChain } = req.body || {};
+    if (!txHash || typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      return res.status(400).json({ error: 'Invalid txHash' });
+    }
+    const userId = req.user.id;
+    const userWallet = (req.user.wallet_address || '').toLowerCase();
+    const hash = txHash.toLowerCase();
+
+    // 1. Anti-replay: a trade can only be claimed once.
+    const existing = await db.query('SELECT id FROM trade_xp_claims WHERE tx_hash = $1', [hash]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Trade already claimed' });
+    }
+
+    // 2. Verify the trade with LI.FI /status (server-side, trustworthy).
+    //    fromChain/toChain (client-provided, non-sensitive) just help LI.FI locate
+    //    same-chain swaps; the trusted data (fromAddress, amountUSD) comes from LI.FI.
+    let statusUrl = `https://li.quest/v1/status?txHash=${txHash}`;
+    const fc = Number(fromChain);
+    const tc = Number(toChain);
+    if (Number.isInteger(fc)) statusUrl += `&fromChain=${fc}`;
+    if (Number.isInteger(tc)) statusUrl += `&toChain=${tc}`;
+
+    let status;
+    try {
+      const r = await fetch(statusUrl);
+      status = await r.json();
+    } catch (err) {
+      console.error('[TradeXP] status fetch failed:', err.message);
+      return res.status(502).json({ error: 'Could not verify trade, try again' });
+    }
+
+    if (!status || status.status !== 'DONE') {
+      return res.status(400).json({ error: 'Trade not completed yet', status: status?.status || 'UNKNOWN' });
+    }
+
+    // 3. Anti-spoof: the trade must have been sent BY this user's wallet.
+    const fromAddress = (status.fromAddress || '').toLowerCase();
+    if (!fromAddress || fromAddress !== userWallet) {
+      return res.status(403).json({ error: 'This trade was not made by your wallet' });
+    }
+
+    // 4. Volume in USD, as reported by LI.FI (not the client).
+    const volumeUsd = Number(status.sending?.amountUSD || status.receiving?.amountUSD || 0);
+    if (!(volumeUsd >= TRADE_XP.MIN_USD)) {
+      return res.status(400).json({ error: `Trade volume below $${TRADE_XP.MIN_USD} minimum` });
+    }
+
+    // 5. XP with per-trade + daily caps.
+    let xp = TRADE_XP.BASE + Math.min(Math.floor(volumeUsd * TRADE_XP.PER_USD), TRADE_XP.PER_TRADE_CAP);
+
+    const todayRow = await db.query(
+      `SELECT COALESCE(SUM(xp_awarded), 0) AS total
+       FROM trade_xp_claims
+       WHERE user_id = $1 AND created_at >= CURRENT_DATE`,
+      [userId]
+    );
+    const awardedToday = parseInt(todayRow.rows[0].total, 10) || 0;
+    const remainingToday = Math.max(0, TRADE_XP.DAILY_CAP - awardedToday);
+    xp = Math.min(xp, remainingToday);
+
+    if (xp <= 0) {
+      return res.json({ success: true, xpAwarded: 0, dailyCapReached: true, message: 'Daily trade XP cap reached' });
+    }
+
+    // 6. Reserve the claim first (UNIQUE guards races), then award.
+    await db.query(
+      `INSERT INTO trade_xp_claims (user_id, tx_hash, volume_usd, xp_awarded) VALUES ($1, $2, $3, $4)`,
+      [userId, hash, volumeUsd, xp]
+    );
+
+    const updated = await GameProgress.addBricks(userId, xp, req.user.isPremium, req.user.hasBattlePass);
+
+    console.log(`[TradeXP] +${xp} XP to user ${userId} | vol $${volumeUsd} | tx ${hash}`);
+
+    return res.json({
+      success: true,
+      xpAwarded: xp,
+      volumeUsd,
+      bricks: updated.bricks,
+      level: updated.level,
+      leveledUp: updated.leveledUp,
+      xpProgress: updated.xpProgress
+    });
+  } catch (error) {
+    console.error('[TradeXP] error:', error.message);
+    return res.status(500).json({ error: 'Failed to award trade XP' });
+  }
+});
 
 // GET /game/progress - Get current game progress
 router.get('/progress', async (req, res) => {
