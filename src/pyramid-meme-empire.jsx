@@ -537,9 +537,12 @@ const PyramidMemeEmpireV5 = () => {
 
         if (result?.xpAwarded > 0) {
           console.log(`[TradeXP] awarded +${result.xpAwarded} XP (level ${result.level})`);
-          if (typeof result.bricks === 'number') { setBricks(result.bricks); setDisplayBricks(result.bricks); }
-          if (typeof result.level === 'number') setLevel(result.level);
           setTradeXpAward(result.xpAwarded); // celebratory popup
+          // Immediate optimistic update (coerce: pg may return numerics as strings)...
+          if (result.bricks != null) { setBricks(Number(result.bricks)); setDisplayBricks(Number(result.bricks)); }
+          if (result.level != null) setLevel(Number(result.level));
+          // ...then an authoritative refresh of all progress UI (bricks, level, XP bar).
+          try { await loadProgress(); } catch (_) {}
         } else if (result?.dailyCapReached) {
           showNotification('Daily trade XP cap reached — back tomorrow!');
         } else {
