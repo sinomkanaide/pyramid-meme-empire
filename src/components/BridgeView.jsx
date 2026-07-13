@@ -29,13 +29,13 @@ const NATIVE_ETH = '0x0000000000000000000000000000000000000000';
 const USDG_ADDRESS = '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168';
 
 // The 0.5% integrator fee only activates once a LI.FI Partner Portal integration
-// named "tapkamun" (with a fee wallet) + an API key are configured via
+// named "tapkamun-oficial" (with a fee wallet) + an API key are configured via
 // VITE_LIFI_API_KEY. Until then the widget runs fee-free so quotes never break.
 const LIFI_API_KEY = import.meta.env.VITE_LIFI_API_KEY;
 
 // Built once at module scope so the wallet/wagmi config stays stable.
 const widgetConfig = {
-  integrator: 'tapkamun',
+  integrator: 'tapkamun-oficial',
   apiKey: LIFI_API_KEY || undefined,
   fee: LIFI_API_KEY ? 0.005 : undefined, // 0.5%
   providers: [EthereumProvider()],
@@ -99,7 +99,7 @@ export default function BridgeView({ onTrade }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <LiFiWidget integrator="tapkamun" config={widgetConfig} />
+        <LiFiWidget integrator="tapkamun-oficial" config={widgetConfig} />
       </div>
     </div>
   );
