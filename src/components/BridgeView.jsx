@@ -45,6 +45,7 @@ export default function BridgeView({ onTrade }) {
   useEffect(() => {
     const handleCompleted = (route) => {
       const txHash = getRouteTxHash(route);
+      console.log('[TradeXP] RouteExecutionCompleted', { txHash, fromChain: route?.fromChainId, toChain: route?.toChainId });
       if (txHash) {
         onTradeRef.current?.({
           txHash,

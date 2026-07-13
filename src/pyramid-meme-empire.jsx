@@ -142,6 +142,7 @@ const PyramidMemeEmpireV5 = () => {
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showPhantomNotice, setShowPhantomNotice] = useState(false);
+  const [tradeXpAward, setTradeXpAward] = useState(null);
   const [availableWallets, setAvailableWallets] = useState([]);
   const [questBonusMultiplier, setQuestBonusMultiplier] = useState(1);
   const [questBonusExpiresAt, setQuestBonusExpiresAt] = useState(null);
@@ -517,23 +518,41 @@ const PyramidMemeEmpireV5 = () => {
 
   // Award XP when a bridge/swap completes in the Bridge tab (verified server-side).
   const handleTradeXp = async ({ txHash, fromChain, toChain }) => {
-    try {
-      const result = await apiCall('/api/game/trade-xp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash, fromChain, toChain })
-      });
-      if (result?.xpAwarded > 0) {
-        if (typeof result.bricks === 'number') { setBricks(result.bricks); setDisplayBricks(result.bricks); }
-        if (typeof result.level === 'number') setLevel(result.level);
-        showNotification(`🎉 +${result.xpAwarded} XP from your trade!`);
-      } else if (result?.dailyCapReached) {
-        showNotification('Daily trade XP cap reached — back tomorrow!');
+    console.log('[TradeXP] trade completed, claiming XP for', txHash, { fromChain, toChain });
+    const MAX_ATTEMPTS = 6;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const result = await apiCall('/api/game/trade-xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash, fromChain, toChain })
+        });
+
+        // Trade not settled/indexed on LI.FI yet — poll a few times before giving up.
+        if (result?.pending) {
+          console.log(`[TradeXP] still settling, retry ${attempt}/${MAX_ATTEMPTS} in 6s...`);
+          await new Promise((r) => setTimeout(r, 6000));
+          continue;
+        }
+
+        if (result?.xpAwarded > 0) {
+          console.log(`[TradeXP] awarded +${result.xpAwarded} XP (level ${result.level})`);
+          if (typeof result.bricks === 'number') { setBricks(result.bricks); setDisplayBricks(result.bricks); }
+          if (typeof result.level === 'number') setLevel(result.level);
+          setTradeXpAward(result.xpAwarded); // celebratory popup
+        } else if (result?.dailyCapReached) {
+          showNotification('Daily trade XP cap reached — back tomorrow!');
+        } else {
+          console.log('[TradeXP] no XP awarded:', result);
+        }
+        return;
+      } catch (err) {
+        // Terminal error (already claimed / wallet mismatch / below minimum) — don't retry.
+        console.log('[TradeXP] error:', err?.message || err);
+        return;
       }
-    } catch (err) {
-      // Non-fatal: already claimed / not verified yet / below minimum.
-      console.log('[TradeXP]', err?.message || err);
     }
+    console.log('[TradeXP] gave up after retries — trade still pending on LI.FI');
   };
 
   // Load progress from backend
@@ -2244,6 +2263,48 @@ const PyramidMemeEmpireV5 = () => {
                 }}
               >
                 GOT IT
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Trade XP congrats */}
+        {tradeXpAward != null && (
+          <div
+            onClick={() => setTradeXpAward(null)}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.9)', zIndex: 10006,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                border: '3px solid #00FF00', borderRadius: 20, padding: 28,
+                maxWidth: 340, width: '100%', textAlign: 'center',
+                boxShadow: '0 0 60px rgba(0,255,0,0.35)',
+              }}
+            >
+              <div style={{ fontSize: 44, marginBottom: 8 }}>🎉</div>
+              <div style={{ fontSize: 22, color: '#00FF00', fontWeight: 'bold', fontFamily: 'inherit' }}>
+                +{tradeXpAward} XP!
+              </div>
+              <div style={{ fontSize: 11, color: '#bbb', marginTop: 10, lineHeight: 1.7, fontFamily: 'inherit' }}>
+                Nice trade! Your XP just went up.<br />
+                <b style={{ color: '#fff' }}>More swaps = more XP 🚀</b>
+              </div>
+              <button
+                onClick={() => setTradeXpAward(null)}
+                style={{
+                  width: '100%', padding: 14, marginTop: 20,
+                  background: 'linear-gradient(135deg, #00FF00, #00cc00)',
+                  border: 'none', borderRadius: 12, fontFamily: 'inherit',
+                  fontSize: 13, color: '#0a0a0a', fontWeight: 'bold', cursor: 'pointer',
+                }}
+              >
+                LET'S GO
               </button>
             </div>
           </div>

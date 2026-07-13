@@ -76,7 +76,9 @@ router.post('/trade-xp', async (req, res) => {
     }
 
     if (!status || status.status !== 'DONE') {
-      return res.status(400).json({ error: 'Trade not completed yet', status: status?.status || 'UNKNOWN' });
+      // Retryable: the trade may still be settling / indexing on LI.FI's side.
+      // Return 200 with a pending flag so the client can poll instead of losing the XP.
+      return res.json({ success: false, pending: true, status: status?.status || 'UNKNOWN' });
     }
 
     // 3. Anti-spoof: the trade must have been sent BY this user's wallet.
