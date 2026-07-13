@@ -2,11 +2,26 @@ import { useEffect, useRef } from 'react';
 import { LiFiWidget, widgetEvents, WidgetEvent } from '@lifi/widget';
 import { EthereumProvider } from '@lifi/widget-provider-ethereum';
 
-// Pull the first on-chain tx hash (the sending tx) out of a completed route.
-// LI.FI's /status traces the whole route from this hash.
+// Find the sending tx hash inside a LI.FI route. Prefer the structured path,
+// then fall back to a deep search — the hash isn't always attached on the
+// RouteExecutionCompleted payload, so we also capture it from the update stream.
+function deepFindTxHash(obj, seen = new Set()) {
+  if (!obj || typeof obj !== 'object' || seen.has(obj)) return null;
+  seen.add(obj);
+  if (typeof obj.txHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(obj.txHash)) return obj.txHash;
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === 'object') {
+      const found = deepFindTxHash(v, seen);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function getRouteTxHash(route) {
   const processes = (route?.steps || []).flatMap((s) => s?.execution?.process || []);
-  return processes.map((p) => p?.txHash).filter(Boolean)[0] || null;
+  const structured = processes.map((p) => p?.txHash).filter(Boolean)[0];
+  return structured || deepFindTxHash(route);
 }
 
 // Robinhood Chain (4663). Native = ETH (gas); USDG = the pay token.
@@ -40,22 +55,34 @@ export default function BridgeView({ onTrade }) {
   const onTradeRef = useRef(onTrade);
   onTradeRef.current = onTrade;
 
-  // Award trade XP when a bridge/swap completes. widgetEvents is a global
-  // singleton emitter, so subscribing here (outside the widget tree) works.
+  // The tx hash isn't reliably attached on the RouteExecutionCompleted payload,
+  // so we capture it from the update stream (keyed by route id) and use it when
+  // the route completes. claimedRoutes guards against double-claiming.
+  const hashByRoute = useRef({});
+  const claimedRoutes = useRef(new Set());
+
   useEffect(() => {
-    const handleCompleted = (route) => {
-      const txHash = getRouteTxHash(route);
-      console.log('[TradeXP] RouteExecutionCompleted', { txHash, fromChain: route?.fromChainId, toChain: route?.toChainId });
-      if (txHash) {
-        onTradeRef.current?.({
-          txHash,
-          fromChain: route?.fromChainId,
-          toChain: route?.toChainId,
-        });
+    const remember = (route) => {
+      const h = getRouteTxHash(route);
+      if (h && route?.id) hashByRoute.current[route.id] = h;
+    };
+    const onUpdated = (update) => remember(update?.route);
+
+    const onCompleted = (route) => {
+      const txHash = getRouteTxHash(route) || (route?.id ? hashByRoute.current[route.id] : null) || null;
+      console.log('[TradeXP] RouteExecutionCompleted', { txHash, id: route?.id, fromChain: route?.fromChainId, toChain: route?.toChainId });
+      if (txHash && route?.id && !claimedRoutes.current.has(route.id)) {
+        claimedRoutes.current.add(route.id);
+        onTradeRef.current?.({ txHash, fromChain: route?.fromChainId, toChain: route?.toChainId });
       }
     };
-    widgetEvents.on(WidgetEvent.RouteExecutionCompleted, handleCompleted);
-    return () => widgetEvents.off(WidgetEvent.RouteExecutionCompleted, handleCompleted);
+
+    widgetEvents.on(WidgetEvent.RouteExecutionUpdated, onUpdated);
+    widgetEvents.on(WidgetEvent.RouteExecutionCompleted, onCompleted);
+    return () => {
+      widgetEvents.off(WidgetEvent.RouteExecutionUpdated, onUpdated);
+      widgetEvents.off(WidgetEvent.RouteExecutionCompleted, onCompleted);
+    };
   }, []);
 
   return (
