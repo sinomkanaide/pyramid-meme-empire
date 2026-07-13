@@ -37,7 +37,9 @@ const LIFI_API_KEY = import.meta.env.VITE_LIFI_API_KEY;
 const widgetConfig = {
   integrator: 'tapkamun-oficial',
   apiKey: LIFI_API_KEY || undefined,
-  fee: LIFI_API_KEY ? 0.005 : undefined, // 0.5%
+  // @lifi/widget v4 takes the integrator fee via `feeConfig.fee` (a top-level
+  // `fee` is ignored). 0.005 = 0.5%; showFeePercentage surfaces it in the UI.
+  feeConfig: LIFI_API_KEY ? { fee: 0.005, name: 'TapKamun', showFeePercentage: true } : undefined,
   providers: [EthereumProvider()],
   // Default destination: ETH on Robinhood Chain, so users land with GAS first.
   // They can switch the destination token to USDG (or swap ETH<->USDG) in the widget.
