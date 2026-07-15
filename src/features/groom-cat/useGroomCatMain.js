@@ -14,6 +14,8 @@ export function useGroomCatMain() {
   const [phase, setPhase] = useState('idle');   // idle | eaten | nap
   const [risk, setRisk] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [combAnim, setCombAnim] = useState(0);  // trigger de la peinada (peinilla)
+  const [furBits, setFurBits] = useState([]);   // pelos que saltan al peinar
   const [napUntil, setNapUntil] = useState(0);
   const [nowTs, setNowTs] = useState(Date.now());
 
@@ -22,6 +24,7 @@ export function useGroomCatMain() {
   const riskRef = useRef(0);
   const tapsRef = useRef(0);
   const lastTapAt = useRef(0);
+  const furId = useRef(0);
   const timers = useRef([]);
 
   const setPhaseBoth = (p) => { phaseRef.current = p; setPhase(p); };
@@ -72,11 +75,33 @@ export function useGroomCatMain() {
     if (phaseRef.current !== 'idle') return;
     lastTapAt.current = Date.now();
     setCombo((c) => c + 1);
+
+    // FX de peinada: swipe de la peinilla + pelos que saltan
+    setCombAnim((c) => c + 1);
+    const id = ++furId.current;
+    const bit = {
+      id,
+      x: 30 + Math.random() * 40,           // % horizontal dentro del gato
+      drift: (Math.random() - 0.5) * 90,    // deriva px al caer
+      rot: Math.floor(Math.random() * 360), // rotación inicial
+      len: 7 + Math.floor(Math.random() * 9),
+    };
+    setFurBits((f) => [...f.slice(-16), bit]);
+    const clean = setTimeout(() => setFurBits((f) => f.filter((b) => b.id !== id)), 1100);
+    timers.current.push(clean);
+
     const n = ++tapsRef.current;
     if (n <= CFG.SAFE_TAPS) return;               // primeros taps sin riesgo
     const nr = Math.min(CFG.RISK_CAP, riskRef.current + CFG.RISK_PER_TAP);
     setRiskBoth(nr);
-    if (Math.random() < nr) triggerEaten();
+
+    // El gato solo muerde en la zona de peligro (>= EATEN_START_RISK). La
+    // probabilidad rampa de 0 hasta EATEN_MAX_CHANCE al llegar al tope.
+    if (nr >= CFG.EATEN_START_RISK) {
+      const span = Math.max(0.0001, CFG.RISK_CAP - CFG.EATEN_START_RISK);
+      const t = (nr - CFG.EATEN_START_RISK) / span;
+      if (Math.random() < t * CFG.EATEN_MAX_CHANCE) triggerEaten();
+    }
   }, [triggerEaten]);
 
   // ¿El gato está comiendo/durmiendo? → el tap principal se bloquea unos seg.
@@ -93,6 +118,7 @@ export function useGroomCatMain() {
 
   return {
     phase, risk, combo, spriteName,
+    combAnim, furBits,
     napLeftMs, napTotalMs: CFG.MAIN_NAP_MS,
     onValidTap, isBusy,
   };

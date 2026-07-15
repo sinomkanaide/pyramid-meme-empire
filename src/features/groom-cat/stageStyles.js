@@ -22,10 +22,41 @@ export const GCM_CSS = `
 .gcm-cat-wrap {
   position: relative; height: 240px;
   display: flex; align-items: center; justify-content: center;
+  /* En desktop el mouse se vuelve una peinilla 🪮 sobre el gato.
+     Si el navegador no soporta el cursor-emoji, cae a pointer. */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42'%3E%3Ctext y='32' font-size='30'%3E🪮%3C/text%3E%3C/svg%3E") 10 30, pointer;
 }
 .gcm-cat {
   height: 220px; image-rendering: pixelated; pointer-events: none;
   filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)); transition: transform .15s;
+}
+
+/* Peinilla que baja en cada peinada */
+.gcm-comb {
+  position: absolute; top: 18px; right: 20%; font-size: 34px;
+  pointer-events: none; filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)); z-index: 3;
+}
+.gcm-comb img { width: 42px; }
+.gcm-comb-swipe { animation: gcm-swipe .3s ease-out; }
+@keyframes gcm-swipe {
+  0% { transform: translateY(-10px) rotate(-14deg) }
+  55% { transform: translateY(52px) rotate(10deg) }
+  100% { transform: translateY(0) rotate(0) }
+}
+
+/* Pelos que saltan al peinar — tufos amarillos (fallback sin PNG) */
+.gcm-fur {
+  position: absolute; top: 42%; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, #ffd21a, #f0a500);
+  transform: rotate(var(--rot, 0deg)); pointer-events: none;
+  animation: gcm-fur-fly 1s ease-out forwards; z-index: 2;
+}
+.gcm-fur-img {
+  position: absolute; top: 42%; width: 16px; pointer-events: none;
+  animation: gcm-fur-fly 1s ease-out forwards; z-index: 2;
+}
+@keyframes gcm-fur-fly {
+  to { transform: translate(var(--drift, 20px), 74px) rotate(200deg); opacity: 0; }
 }
 .gcm-annoyed { animation: gcm-twitch .6s infinite; }
 .gcm-turning { animation: gcm-twitch .22s infinite; }

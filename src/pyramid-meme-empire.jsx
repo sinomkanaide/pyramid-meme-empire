@@ -3039,6 +3039,8 @@ const PyramidMemeEmpireV5 = () => {
                     phase={groomCat.phase}
                     risk={groomCat.risk}
                     combo={groomCat.combo}
+                    combAnim={groomCat.combAnim}
+                    furBits={groomCat.furBits}
                     napLeftMs={groomCat.napLeftMs}
                   />
                 ) : (

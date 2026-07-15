@@ -10,17 +10,24 @@ export const FEATURES = {
 };
 
 export const GROOM_CAT_CONFIG = {
-  // ---------- RIESGO ----------
-  SAFE_TAPS: 5,              // primeros N taps sin riesgo
-  RISK_PER_TAP: 0.008,       // +0.8% de riesgo por tap después de los seguros
-  RISK_CAP: 0.85,            // techo: nunca llega a 100%
+  // ---------- MEDIDOR DE ENOJO / RIESGO ----------
+  // El "riesgo" es un medidor 0→1 que sube parejo con cada tap. El gato NO
+  // puede comerte hasta llegar a la zona "turning" (EATEN_START_RISK): así
+  // SIEMPRE ves la escalada calm → annoyed → turning antes de la mordida.
+  SAFE_TAPS: 5,              // primeros N taps sin que suba el medidor
+  RISK_PER_TAP: 0.03,        // +3% de medidor por tap después de los seguros
+  RISK_CAP: 1.0,             // tope del medidor (100%)
   CALM_AFTER_MS: 2500,       // ms sin tapear antes de que el gato empiece a calmarse
-  CALM_DECAY_PER_SEC: 0.03,  // riesgo que baja por segundo mientras se calma
-  CALM_FLOOR: 0,             // hasta dónde puede bajar el riesgo al calmarse
+  CALM_DECAY_PER_SEC: 0.04,  // cuánto baja el medidor por segundo al calmarse
+  CALM_FLOOR: 0,             // hasta dónde puede bajar al calmarse
 
-  // ---------- ESTADOS VISUALES (umbrales de riesgo) ----------
-  ANNOYED_AT: 0.35,          // orejas atrás — telegrafía el peligro
-  TURNING_AT: 0.65,          // ya está girando — ponte nervioso
+  // ---------- ESTADOS VISUALES (umbrales del medidor) ----------
+  ANNOYED_AT: 0.40,          // orejas atrás — telegrafía el peligro
+  TURNING_AT: 0.72,          // ya se está dando vuelta — ponte nervioso
+
+  // ---------- MORDIDA ----------
+  EATEN_START_RISK: 0.72,    // el gato SOLO puede comerte a partir de aquí (= turning)
+  EATEN_MAX_CHANCE: 0.5,     // prob. de mordida por tap con el medidor al máximo (rampa 0→esto)
 
   // ---------- PUNTOS ----------
   POINTS_PER_TAP: 1,
