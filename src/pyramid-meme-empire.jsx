@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X, ArrowLeftRight } from 'lucide-react';
 import { ethers } from 'ethers';
-import { initGroomCat, groomCatInterceptTap } from './features/groom-cat';
+import { FEATURES, useGroomCatMain, GroomCatStage } from './features/groom-cat';
 
 // Lazy-loaded so the LI.FI widget (and its wagmi/viem deps) ship as a separate
 // chunk, loaded only when the user opens the Bridge tab.
@@ -196,7 +196,6 @@ const PyramidMemeEmpireV5 = () => {
   
   // ========== FLOATING COINS ==========
   useEffect(() => {
-    initGroomCat(); // groom-cat: monta su propio root aislado (respeta FEATURES.GROOM_CAT)
     const initialCoins = Array.from({ length: 8 }, (_, i) => ({
       id: i,
       coin: memecoins[Math.floor(Math.random() * memecoins.length)],
@@ -618,6 +617,11 @@ const PyramidMemeEmpireV5 = () => {
     }
   };
 
+  // ========== GROOM CAT (modo principal) ==========
+  // Capa de riesgo/fases/combo sobre el tap. No toca puntos: la ganancia real
+  // la sigue dando el backend por cada tap. Detrás de FEATURES.GROOM_CAT.
+  const groomCat = useGroomCatMain();
+
   // ========== TAP MECHANICS ==========
   const lastTapTs = useRef(0);
 
@@ -633,7 +637,9 @@ const PyramidMemeEmpireV5 = () => {
       e.stopPropagation();
     }
 
-    if (groomCatInterceptTap()) return; // modo gato activo: este tap no cuenta aquí
+    // Modo gato: mientras te está comiendo o duerme la siesta, el tap se bloquea
+    // unos segundos (el juego normal sigue igual cuando el gato está en calma).
+    if (FEATURES.GROOM_CAT && groomCat.isBusy()) return;
 
     const tapCoords = getTapCoords(e);
     const now = Date.now();
@@ -706,6 +712,9 @@ const PyramidMemeEmpireV5 = () => {
         setTimeout(() => setPyramidPulse(false), 300);
         playCoinSound();
         createParticles(tapCoords.x, tapCoords.y);
+
+        // Groom cat: este tap contó → avanza el riesgo (puede desatar "te come")
+        if (FEATURES.GROOM_CAT) groomCat.onValidTap();
       } catch (err) {
         if (err.message?.includes('cooldown') || err.message?.includes('Wait') || err.message?.includes('Too many')) {
           showNotification('⏱️ COOLDOWN!');
@@ -760,6 +769,9 @@ const PyramidMemeEmpireV5 = () => {
     if (bricks + 1 >= 100) {
       updateQuest(5, true); // Stack 100 Bricks quest
     }
+
+    // Groom cat: este tap contó → avanza el riesgo (puede desatar "te come")
+    if (FEATURES.GROOM_CAT) groomCat.onValidTap();
   };
 
   // ========== PARTICLES ==========
@@ -3021,12 +3033,22 @@ const PyramidMemeEmpireV5 = () => {
                 onClick={handleTap}
                 onTouchEnd={(e) => { e.preventDefault(); handleTap(e); }}
               >
-                <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
-                  <div className="pyramid-grid">
-                    {renderPyramid()}
+                {FEATURES.GROOM_CAT ? (
+                  <GroomCatStage
+                    spriteName={groomCat.spriteName}
+                    phase={groomCat.phase}
+                    risk={groomCat.risk}
+                    combo={groomCat.combo}
+                    napLeftMs={groomCat.napLeftMs}
+                  />
+                ) : (
+                  <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
+                    <div className="pyramid-grid">
+                      {renderPyramid()}
+                    </div>
+                    {hasBattlePass && <div className="golden-glow" />}
                   </div>
-                  {hasBattlePass && <div className="golden-glow" />}
-                </div>
+                )}
 
                 <div className={`level-badge ${isLevelCapped && !isPremium && !hasBattlePass ? 'level-capped' : ''} ${isPremium ? 'level-premium' : ''} ${hasBattlePass ? 'level-battlepass' : ''}`}>
                   {hasBattlePass && <span className="bp-badge-small">🏆</span>}
@@ -3075,7 +3097,9 @@ const PyramidMemeEmpireV5 = () => {
                 )}
 
                 <div className="tap-hint">
-                  {hasBattlePass ? 'BATTLE PASS POWER!' : isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
+                  {FEATURES.GROOM_CAT
+                    ? (groomCat.phase === 'nap' ? 'the cat is resting…' : groomCat.phase === 'eaten' ? 'RUN!' : 'tap to groom · don\'t get eaten')
+                    : hasBattlePass ? 'BATTLE PASS POWER!' : isPremium ? 'unlimited tapping!' : isLevelCapped ? 'tap to earn bricks' : 'tap to stack'}
                 </div>
               </div>
 

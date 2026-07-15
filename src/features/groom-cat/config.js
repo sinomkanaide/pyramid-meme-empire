@@ -60,10 +60,16 @@ export const GROOM_CAT_CONFIG = {
   // Recibe (pointsGanadosEnLaSesión, totalAcumulado). Déjalo null por ahora.
   onPointsAwarded: null,
 
+  // ---------- MODO PRINCIPAL (el gato ES el juego) ----------
+  // Que te coma NO bloquea la ganancia con lockout largo: solo una siesta
+  // corta. La ganancia real (puntos del leaderboard) la sigue dando el backend
+  // por cada tap. El riesgo real = aguantar más sin que te coma = más taps.
+  MAIN_NAP_MS: 5000,          // siesta tras ser comido (ms). Corta, sin lockout de minutos.
+
   // ---------- FX del "te come" ----------
   EATEN_ZOOM_SCALE: 3.2,      // zoom agresivo hacia la boca
   EATEN_SHAKE_MS: 900,        // duración del temblor de pantalla
-  EATEN_SEQUENCE_MS: 2200,    // duración total de la secuencia antes de pasar a sleeping
+  EATEN_SEQUENCE_MS: 1800,    // duración de la secuencia explosiva antes de la siesta
 
   // ---------- PERSISTENCIA ----------
   STORAGE_KEY: 'pme_groomcat_v1', // namespaced, no choca con pme_token
