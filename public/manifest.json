@@ -1,7 +1,7 @@
 {
   "name": "TAPKAMUN",
   "short_name": "TAPKAMUN",
-  "description": "Tap to earn on Base Network",
+  "description": "Tap to earn on Robinhood Chain",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",

@@ -1645,7 +1645,7 @@ const PyramidMemeEmpireV5 = () => {
     // Subtitle
     ctx.fillStyle = '#ffffff88';
     ctx.font = '12px "Press Start 2P", monospace';
-    ctx.fillText('TAP TO EARN ON BASE', W / 2, 110);
+    ctx.fillText('TAP TO EARN ON ROBINHOOD', W / 2, 110);
 
     // Divider line
     ctx.strokeStyle = `${cardColor}66`;
