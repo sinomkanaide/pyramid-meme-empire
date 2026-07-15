@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { Copy, Share2, Users, ShoppingBag, Gamepad2, Trophy, Zap, Info, X, ArrowLeftRight } from 'lucide-react';
 import { ethers } from 'ethers';
+import { initGroomCat, groomCatInterceptTap } from './features/groom-cat';
 
 // Lazy-loaded so the LI.FI widget (and its wagmi/viem deps) ship as a separate
 // chunk, loaded only when the user opens the Bridge tab.
@@ -195,6 +196,7 @@ const PyramidMemeEmpireV5 = () => {
   
   // ========== FLOATING COINS ==========
   useEffect(() => {
+    initGroomCat(); // groom-cat: monta su propio root aislado (respeta FEATURES.GROOM_CAT)
     const initialCoins = Array.from({ length: 8 }, (_, i) => ({
       id: i,
       coin: memecoins[Math.floor(Math.random() * memecoins.length)],
@@ -630,6 +632,8 @@ const PyramidMemeEmpireV5 = () => {
       e.preventDefault();
       e.stopPropagation();
     }
+
+    if (groomCatInterceptTap()) return; // modo gato activo: este tap no cuenta aquí
 
     const tapCoords = getTapCoords(e);
     const now = Date.now();
