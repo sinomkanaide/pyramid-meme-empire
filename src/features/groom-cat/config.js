@@ -15,14 +15,14 @@ export const GROOM_CAT_CONFIG = {
   // puede comerte hasta llegar a la zona "turning" (EATEN_START_RISK): así
   // SIEMPRE ves la escalada calm → annoyed → turning antes de la mordida.
   SAFE_TAPS: 5,              // primeros N taps sin que suba el medidor
-  RISK_PER_TAP: 0.03,        // +3% de medidor por tap después de los seguros
+  RISK_PER_TAP: 0.045,       // +4.5% de medidor por tap después de los seguros (se enoja antes)
   RISK_CAP: 1.0,             // tope del medidor (100%)
   CALM_AFTER_MS: 2500,       // ms sin tapear antes de que el gato empiece a calmarse
   CALM_DECAY_PER_SEC: 0.04,  // cuánto baja el medidor por segundo al calmarse
   CALM_FLOOR: 0,             // hasta dónde puede bajar al calmarse
 
   // ---------- ESTADOS VISUALES (umbrales del medidor) ----------
-  ANNOYED_AT: 0.40,          // orejas atrás — telegrafía el peligro
+  ANNOYED_AT: 0.30,          // orejas atrás — telegrafía el peligro (se enoja antes)
   TURNING_AT: 0.72,          // ya se está dando vuelta — ponte nervioso
 
   // ---------- MORDIDA ----------
@@ -71,7 +71,7 @@ export const GROOM_CAT_CONFIG = {
   // Que te coma NO bloquea la ganancia con lockout largo: solo una siesta
   // corta. La ganancia real (puntos del leaderboard) la sigue dando el backend
   // por cada tap. El riesgo real = aguantar más sin que te coma = más taps.
-  MAIN_NAP_MS: 5000,          // siesta tras ser comido (ms). Corta, sin lockout de minutos.
+  MAIN_NAP_MS: 10000,         // siesta tras ser comido (ms). Corta, sin lockout de minutos.
 
   // ---------- FX del "te come" ----------
   EATEN_ZOOM_SCALE: 3.2,      // zoom agresivo hacia la boca

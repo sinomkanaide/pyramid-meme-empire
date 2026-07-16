@@ -674,6 +674,16 @@ const PyramidMemeEmpireV5 = () => {
 
       try {
         const result = await apiCall('/api/game/tap', { method: 'POST' });
+
+        // Guard: a veces el backend devuelve una respuesta intermitente vacía
+        // (level 0 / sin datos) que causaba un flicker de "nivel 0 / barra en 0".
+        // La ignoramos y salimos; el `finally` desbloquea y el próximo tap trae
+        // los valores correctos. No se pisa el estado bueno ni avanza el riesgo.
+        if (!result || !(result.level > 0)) {
+          console.warn('[tap] respuesta inválida, ignorada:', result);
+          return;
+        }
+
         setBricks(result.bricks);
         setLevel(result.level);
         setEnergy(result.energy);

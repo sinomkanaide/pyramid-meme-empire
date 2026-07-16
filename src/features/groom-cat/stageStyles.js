@@ -20,14 +20,14 @@ export const GCM_CSS = `
 .gcm-risklabel { font-size: 11px; font-weight: 700; min-width: 84px; text-align: right; }
 
 .gcm-cat-wrap {
-  position: relative; height: 240px;
+  position: relative; height: min(360px, 46vh);
   display: flex; align-items: center; justify-content: center;
   /* En desktop el mouse se vuelve una peinilla 🪮 sobre el gato.
      Si el navegador no soporta el cursor-emoji, cae a pointer. */
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42'%3E%3Ctext y='32' font-size='30'%3E🪮%3C/text%3E%3C/svg%3E") 10 30, pointer;
 }
 .gcm-cat {
-  height: 220px; image-rendering: pixelated; pointer-events: none;
+  height: min(340px, 44vh); image-rendering: pixelated; pointer-events: none;
   filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)); transition: transform .15s;
 }
 
