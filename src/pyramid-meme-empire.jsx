@@ -39,13 +39,13 @@ const PRICE_LABELS = {
 const TOOLTIP_DATA = {
   premium: {
     title: 'PREMIUM',
-    description: 'Unlock unlimited potential with no restrictions.',
-    benefits: ['Unlimited energy - tap forever', 'No cooldown between taps', 'Unlock all levels (no level 3 cap)', 'Permanent unlock']
+    description: 'Casual comfort: tap freely forever. Does NOT enter you into season prizes — that needs the Battle Pass.',
+    benefits: ['Unlimited energy - tap forever', 'No cooldown between taps', 'Unlock all levels (no level 3 cap)', 'Permanent - one-time payment', '⚠️ Not eligible for season prizes']
   },
   battlepass: {
     title: 'BATTLE PASS',
     description: 'The ultimate TAPKAMUN experience for 30 days.',
-    benefits: ['Permanent X5 boost', '+10% XP bonus', 'Leaderboard access', '+10% XP per verified referral', 'Golden pyramid skin', 'Unlimited energy & no cooldown']
+    benefits: ['Required to compete for season prizes', 'Permanent X5 boost', 'Leaderboard access', '+10% XP per verified referral', 'Exclusive golden aura on your cat ✨', 'Unlimited energy & no cooldown']
   },
   boostx2: {
     title: 'BOOST X2',
@@ -3052,6 +3052,7 @@ const PyramidMemeEmpireV5 = () => {
                     combAnim={groomCat.combAnim}
                     furBits={groomCat.furBits}
                     napLeftMs={groomCat.napLeftMs}
+                    goldAura={hasBattlePass}
                   />
                 ) : (
                   <div className={`pyramid-container ${pyramidPulse ? 'pyramid-pulse' : ''} ${hasBattlePass ? 'pyramid-golden' : ''}`}>
@@ -3428,7 +3429,7 @@ const PyramidMemeEmpireV5 = () => {
                       <div className="item-subtitle">
                         {hasBattlePass
                           ? `ACTIVE - ${battlePassInfo?.daysRemaining || 30} days left`
-                          : 'SEASON 1 - UNLIMITED POWER'}
+                          : 'SEASON 1 · REQUIRED TO WIN PRIZES'}
                       </div>
                     </div>
                     <button
@@ -3458,7 +3459,7 @@ const PyramidMemeEmpireV5 = () => {
                     <div className="item-icon-small">👑</div>
                     <div className="item-details">
                       <div className="item-name">PREMIUM</div>
-                      <div className="item-brief">{isPremium ? 'Activated forever!' : 'Unlimited tapping forever'}</div>
+                      <div className="item-brief">{isPremium ? 'Activated forever!' : 'Unlimited tapping · casual (no prizes)'}</div>
                     </div>
                   </div>
                   <div className="item-right">
@@ -3540,35 +3541,9 @@ const PyramidMemeEmpireV5 = () => {
                   </div>
                 </div>
 
-                {/* Energy Refill */}
-                <div className={`shop-item-row ${(isPremium || hasBattlePass) ? 'item-disabled' : ''}`}>
-                  <div className="item-left">
-                    <div className="item-icon-small">🔋</div>
-                    <div className="item-details">
-                      <div className="item-name">ENERGY REFILL</div>
-                      <div className="item-brief">
-                        {hasBattlePass ? 'Not needed (Battle Pass)' : isPremium ? 'Not needed (Premium)' : 'Instant +100 energy'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="item-right">
-                    <button
-                      className="info-btn-small"
-                      onMouseDown={(e) => openTooltip('energy', e)}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Info size={16} />
-                    </button>
-                    <div className="item-price-small">$0.25</div>
-                    <button
-                      className={`buy-btn-small ${(isPremium || hasBattlePass) ? 'btn-disabled' : 'btn-energy'}`}
-                      onClick={() => !(isPremium || hasBattlePass) && setShowEnergyModal(true)}
-                      disabled={isPremium || hasBattlePass}
-                    >
-                      {(isPremium || hasBattlePass) ? 'N/A' : 'BUY'}
-                    </button>
-                  </div>
-                </div>
+                {/* Energy Refill removido de la tienda (SKU muerta — nadie la
+                    compraba). La energía como mecánica sigue existiendo y empuja
+                    a comprar el Battle Pass. El modal/handler quedan sin uso. */}
               </div>
             </div>
           )}

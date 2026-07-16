@@ -29,6 +29,22 @@ export const GCM_CSS = `
 .gcm-cat {
   height: min(340px, 44vh); image-rendering: pixelated; pointer-events: none;
   filter: drop-shadow(0 6px 16px rgba(0,0,0,.5)); transition: transform .15s;
+  position: relative; z-index: 1;
+}
+
+/* Aura dorada exclusiva del Battle Pass */
+.gcm-aura {
+  position: absolute; width: 78%; height: 78%; border-radius: 50%; z-index: 0;
+  background: radial-gradient(circle, rgba(255,215,0,.55), rgba(255,190,0,.16) 55%, transparent 72%);
+  filter: blur(6px); pointer-events: none;
+  animation: gcm-aura-pulse 2s ease-in-out infinite;
+}
+@keyframes gcm-aura-pulse {
+  0%,100% { transform: scale(.92); opacity: .7 }
+  50% { transform: scale(1.08); opacity: 1 }
+}
+.gcm-cat.gcm-gold {
+  filter: drop-shadow(0 0 9px rgba(255,215,0,.85)) drop-shadow(0 0 20px rgba(255,180,0,.5)) drop-shadow(0 6px 16px rgba(0,0,0,.5));
 }
 
 /* Peinilla que baja en cada peinada */

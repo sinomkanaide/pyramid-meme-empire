@@ -21,7 +21,7 @@ function ensureCss() {
   document.head.appendChild(s);
 }
 
-export default function GroomCatStage({ spriteName, phase, risk, combo, combAnim, furBits = [], napLeftMs }) {
+export default function GroomCatStage({ spriteName, phase, risk, combo, combAnim, furBits = [], napLeftMs, goldAura = false }) {
   useEffect(() => { ensureCss(); }, []);
 
   const dangerPct = Math.round(risk * 100);
@@ -50,8 +50,10 @@ export default function GroomCatStage({ spriteName, phase, risk, combo, combAnim
       )}
 
       <div className={`gcm-cat-wrap ${phase === 'eaten' ? 'gcm-zoom' : ''}`}>
+        {/* Aura dorada exclusiva del Battle Pass (efecto CSS, sirve en las 5 poses) */}
+        {goldAura && phase !== 'eaten' && <div className="gcm-aura" />}
         <img
-          className={`gcm-cat gcm-${spriteName}`}
+          className={`gcm-cat gcm-${spriteName} ${goldAura ? 'gcm-gold' : ''}`}
           src={sprite(spriteName)}
           alt={spriteName}
           draggable={false}
