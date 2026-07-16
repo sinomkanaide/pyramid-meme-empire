@@ -1337,6 +1337,89 @@ router.delete('/leaderboard/seasons/:id', async (req, res) => {
   }
 });
 
+// POST /admin/season-reset - HARD RESET: snapshot, wipe progress+quests, revoke BPs
+// Destructivo. Requiere adminAuth + { confirm: "RESET SEASON" }. Todo en una
+// transacción: si algo falla, ROLLBACK y no se toca nada.
+router.post('/season-reset', adminAuth, async (req, res) => {
+  const { confirm } = req.body || {};
+  if (confirm !== 'RESET SEASON') {
+    return res.status(400).json({ error: 'Confirmation required: send { confirm: "RESET SEASON" }' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1) SNAPSHOT antes de borrar: standings completos + quién tenía BP (auditoría/compensación)
+    const standings = await client.query(`
+      SELECT u.id, u.wallet_address, u.username, u.is_premium,
+             u.has_battle_pass, u.battle_pass_expires_at,
+             gp.bricks, gp.level, gp.total_taps, gp.total_bricks_earned
+      FROM users u JOIN game_progress gp ON gp.user_id = u.id
+      ORDER BY gp.bricks DESC
+    `);
+    const rankings = standings.rows.map((p, i) => ({ rank: i + 1, ...p }));
+    const bpHolders = standings.rows
+      .filter((p) => p.has_battle_pass)
+      .map((p) => ({ id: p.id, wallet_address: p.wallet_address, username: p.username, battle_pass_expires_at: p.battle_pass_expires_at }));
+    const totalBricks = standings.rows.reduce((s, p) => s + Number(p.bricks || 0), 0);
+
+    // period_start = NOW() para que cada reset sea único (evita choque con
+    // UNIQUE(period_type, period_start) si se resetea más de una vez).
+    const snap = await client.query(`
+      INSERT INTO leaderboard_snapshots (period_type, period_start, period_end, rankings, total_participants, total_bricks)
+      VALUES ('season', NOW(), NOW(), $1, $2, $3)
+      RETURNING id
+    `, [JSON.stringify({ standings: rankings, bp_holders: bpHolders }), standings.rows.length, totalBricks]);
+
+    // 2) RESET del progreso (leaderboard + progresión). Se conservan pme_tokens/pme_claimed.
+    const gp = await client.query(`
+      UPDATE game_progress SET
+        bricks = 0, level = 1, xp = 0, xp_to_next_level = 100,
+        total_taps = 0, total_bricks_earned = 0, tap_power = 1,
+        energy = max_energy,
+        boost_multiplier = 1.0, boost_expires_at = NULL, boost_type = NULL,
+        xp_bonus_percent = 0, daily_streak = 0,
+        updated_at = NOW()
+    `);
+
+    // 3) RESET de quests (ambas tablas)
+    const qc = await client.query('DELETE FROM quest_completions');
+    let qpCleared = 0;
+    try {
+      const qp = await client.query('DELETE FROM quest_progress');
+      qpCleared = qp.rowCount;
+    } catch (e) {
+      console.warn('[SEASON RESET] quest_progress delete skipped:', e.message);
+    }
+
+    // 4) REVOCAR todos los Battle Pass
+    const bp = await client.query(`
+      UPDATE users SET has_battle_pass = false, battle_pass_expires_at = NULL, updated_at = NOW()
+      WHERE has_battle_pass = true
+    `);
+
+    await client.query('COMMIT');
+
+    console.log(`[SEASON RESET] snapshot=${snap.rows[0].id} progress=${gp.rowCount} quests=${qc.rowCount}+${qpCleared} bpRevoked=${bp.rowCount} bpSnapshotted=${bpHolders.length}`);
+    res.json({
+      success: true,
+      snapshotId: snap.rows[0].id,
+      progressReset: gp.rowCount,
+      questCompletionsCleared: qc.rowCount,
+      questProgressCleared: qpCleared,
+      battlePassesRevoked: bp.rowCount,
+      bpHoldersSnapshotted: bpHolders.length
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[SEASON RESET] FAILED — rolled back, nothing changed:', error);
+    res.status(500).json({ error: 'Season reset failed (rolled back, nothing changed): ' + error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /admin/leaderboard - Top players with full data (optionally filtered by season)
 router.get('/leaderboard', async (req, res) => {
   try {

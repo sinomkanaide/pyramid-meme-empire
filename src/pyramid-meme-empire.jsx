@@ -140,6 +140,16 @@ const PyramidMemeEmpireV5 = () => {
   const [xpProgress, setXpProgress] = useState({ current: 0, needed: 100, percent: 0 });
   const [referralStats, setReferralStats] = useState({ total: 0, verified: 0, bonusPercent: 0 });
   const [battlePassInfo, setBattlePassInfo] = useState(null);
+  // Aviso de "BP vencido": recordamos el último expiresAt ya avisado para no
+  // molestar en cada carga (se vuelve a mostrar si renueva y vuelve a vencer).
+  const [bpNoticeSeen, setBpNoticeSeen] = useState(() => {
+    try { return localStorage.getItem('pme_bp_expired_seen'); } catch { return null; }
+  });
+  const dismissBpNotice = () => {
+    const v = String(battlePassInfo?.expiresAt);
+    try { localStorage.setItem('pme_bp_expired_seen', v); } catch { /* noop */ }
+    setBpNoticeSeen(v);
+  };
   const [referralCode, setReferralCode] = useState('');
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showPhantomNotice, setShowPhantomNotice] = useState(false);
@@ -2992,16 +3002,56 @@ const PyramidMemeEmpireV5 = () => {
                 </div>
               </div>
 
-              {/* Battle Pass Banner - Always show if has BP */}
-              {hasBattlePass && (
-                <div className="boost-indicator boost-battlepass">
-                  <div className="boost-info">
-                    <span className="boost-icon">🏆</span>
-                    <span className="boost-label">BATTLE PASS ACTIVE</span>
+              {/* Battle Pass Banner - Always show if has BP. Urgencia cuando quedan ≤3 días. */}
+              {hasBattlePass && (() => {
+                const bpDays = battlePassInfo?.daysRemaining || 0;
+                const urgent = bpDays > 0 && bpDays <= 3;
+                return (
+                  <div
+                    className="boost-indicator boost-battlepass"
+                    onClick={urgent ? () => { setCurrentTab('shop'); playWhoosh(); } : undefined}
+                    style={urgent ? { cursor: 'pointer', borderColor: '#ff9500', background: 'rgba(255,149,0,0.12)' } : undefined}
+                  >
+                    <div className="boost-info">
+                      <span className="boost-icon">{urgent ? '⏳' : '🏆'}</span>
+                      <span className="boost-label" style={urgent ? { color: '#ff9500' } : undefined}>
+                        {urgent ? 'BATTLE PASS EXPIRING' : 'BATTLE PASS ACTIVE'}
+                      </span>
+                    </div>
+                    <div className="boost-timer bp-timer" style={urgent ? { color: '#ff9500', fontWeight: 'bold' } : undefined}>
+                      {bpDays > 0 ? `${bpDays}d ${urgent ? '— renew!' : 'remaining'}` : 'active'}
+                    </div>
                   </div>
-                  <div className="boost-timer bp-timer">
-                    {battlePassInfo?.daysRemaining ? `${battlePassInfo.daysRemaining}d remaining` : '30 days'}
+                );
+              })()}
+
+              {/* Aviso: BP vencido (tenía BP pero ya no está activo) */}
+              {battlePassInfo?.hasBattlePass && !battlePassInfo?.isActive
+                && String(battlePassInfo?.expiresAt) !== bpNoticeSeen && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 8px',
+                  padding: '10px 12px', borderRadius: 10,
+                  background: 'rgba(255,68,102,0.12)', border: '1px solid rgba(255,68,102,0.45)'
+                }}>
+                  <span style={{ fontSize: 20 }}>⌛</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: '#ff4466', fontWeight: 'bold', fontSize: 12 }}>Your Battle Pass expired</div>
+                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 1 }}>
+                      Renew to keep competing for season prizes.
+                    </div>
                   </div>
+                  <button
+                    onClick={() => { setCurrentTab('shop'); playWhoosh(); }}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                             background: 'linear-gradient(135deg,#FFD700,#ff9500)', color: '#1a1a2e', fontWeight: 'bold', fontSize: 11 }}
+                  >
+                    RENEW
+                  </button>
+                  <button
+                    onClick={dismissBpNotice}
+                    aria-label="Dismiss"
+                    style={{ background: 'none', border: 'none', color: '#999', fontSize: 16, cursor: 'pointer', padding: '0 2px' }}
+                  >×</button>
                 </div>
               )}
 

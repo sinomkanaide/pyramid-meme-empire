@@ -164,8 +164,10 @@ router.get('/progress', async (req, res) => {
     // Calculate XP progress for current level
     const xpProgress = getXpProgress(progress.bricks, progress.level);
 
-    // Get Battle Pass info and referral stats
-    const battlePassInfo = req.user.hasBattlePass ? await User.getBattlePassInfo(req.user.id) : null;
+    // Get Battle Pass info and referral stats.
+    // Siempre traemos battlePassInfo (aunque el BP esté vencido) para que el
+    // front pueda avisar "tu BP venció" (raw hasBattlePass=true + isActive=false).
+    const battlePassInfo = await User.getBattlePassInfo(req.user.id);
     const referralStats = req.user.hasBattlePass ? await User.getVerifiedReferralStats(req.user.id) : null;
 
     // Get quest bonus (KiiChain, all users)

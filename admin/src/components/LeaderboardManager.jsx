@@ -25,6 +25,11 @@ export default function LeaderboardManager({ apiCall }) {
   const [exporting, setExporting] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagResult, setDiagResult] = useState(null)
+  // Season reset (danger zone)
+  const [showReset, setShowReset] = useState(false)
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [resetResult, setResetResult] = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -244,6 +249,27 @@ export default function LeaderboardManager({ apiCall }) {
       alert('Diagnosis failed: ' + err.message)
     } finally {
       setDiagnosing(false)
+    }
+  }
+
+  const runSeasonReset = async () => {
+    if (resetConfirm !== 'RESET SEASON') { alert('Type exactly: RESET SEASON'); return }
+    if (!confirm('FINAL WARNING\n\nThis SNAPSHOTS current standings, then WIPES all player progress (bricks, level, XP, taps) + quests, and REVOKES every Battle Pass.\n\nThis cannot be undone. Continue?')) return
+    setResetting(true)
+    setResetResult(null)
+    try {
+      const data = await apiCall('/api/admin/season-reset', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: 'RESET SEASON' })
+      })
+      setResetResult(data)
+      setResetConfirm('')
+      setShowReset(false)
+      loadData()
+    } catch (err) {
+      alert('Reset failed: ' + err.message)
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -556,6 +582,39 @@ export default function LeaderboardManager({ apiCall }) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Danger Zone — Season Reset */}
+      <div className="card" style={{ marginTop: 24, border: '1px solid rgba(255,68,102,0.4)', background: 'rgba(255,68,102,0.05)' }}>
+        <div className="card-header-row">
+          <h3 className="card-title" style={{ margin: 0, color: '#ff4466' }}>{'⚠️'} Danger Zone — Season Reset</h3>
+        </div>
+        <p className="text-muted" style={{ fontSize: 12, padding: '4px 0 10px' }}>
+          Snapshots the current standings (kept for records), then <strong>wipes ALL player progress</strong> (bricks, level, XP, taps) and <strong>quests</strong>, and <strong>revokes every Battle Pass</strong>. Keeps token balances (pme). This cannot be undone.
+        </p>
+
+        {resetResult && (
+          <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.3)', fontSize: 12 }}>
+            <strong className="text-green">Reset complete.</strong> Snapshot #{resetResult.snapshotId} saved.{' '}
+            {resetResult.progressReset} players reset · {resetResult.questCompletionsCleared} quest completions cleared · {resetResult.battlePassesRevoked} Battle Passes revoked ({resetResult.bpHoldersSnapshotted} snapshotted for records).
+            <button className="btn btn-sm" onClick={() => setResetResult(null)} style={{ marginLeft: 10, fontSize: 10 }}>Dismiss</button>
+          </div>
+        )}
+
+        {!showReset ? (
+          <button className="btn btn-danger" onClick={() => setShowReset(true)}>Start Season Reset…</button>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 440 }}>
+            <label className="form-label" style={{ margin: 0 }}>Type <strong>RESET SEASON</strong> to confirm:</label>
+            <input className="login-input" value={resetConfirm} onChange={e => setResetConfirm(e.target.value)} placeholder="RESET SEASON" autoFocus />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={() => { setShowReset(false); setResetConfirm('') }}>Cancel</button>
+              <button className="btn btn-danger" onClick={runSeasonReset} disabled={resetting || resetConfirm !== 'RESET SEASON'}>
+                {resetting ? 'Resetting…' : 'WIPE & REVOKE'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showCreateSeason && (
