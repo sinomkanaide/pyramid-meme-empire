@@ -31,6 +31,23 @@ async function initAdminTables() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Full pre-reset backups (para poder restaurar si el reset fue malicioso/erróneo)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS season_reset_backups (
+        id SERIAL PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT NOW(),
+        triggered_by VARCHAR(64),
+        total_participants INTEGER,
+        total_bricks BIGINT,
+        bp_count INTEGER,
+        game_progress JSONB,
+        quest_completions JSONB,
+        quest_progress JSONB,
+        battle_pass JSONB,
+        restored_at TIMESTAMP,
+        restored_by VARCHAR(64)
+      )
+    `);
     // Ensure quest_bonus columns exist on game_progress
     await db.query(`
       ALTER TABLE game_progress ADD COLUMN IF NOT EXISTS quest_bonus_multiplier DECIMAL(4,2) DEFAULT 1.0
@@ -1350,6 +1367,40 @@ router.post('/season-reset', adminAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // 0) BACKUP COMPLETO antes de tocar nada → permite restaurar si el reset
+    //    fue malicioso o un error. Se guarda todo el estado que el reset borra.
+    const gpRows = await client.query(`SELECT COALESCE(json_agg(t), '[]'::json) AS d FROM game_progress t`);
+    const qcRows = await client.query(`SELECT COALESCE(json_agg(t), '[]'::json) AS d FROM quest_completions t`);
+    let qpData = [];
+    try {
+      const qpRows = await client.query(`SELECT COALESCE(json_agg(t), '[]'::json) AS d FROM quest_progress t`);
+      qpData = qpRows.rows[0].d;
+    } catch (e) { console.warn('[SEASON RESET] quest_progress backup skipped:', e.message); }
+    const bpRows = await client.query(`
+      SELECT COALESCE(json_agg(json_build_object('user_id', id, 'has_battle_pass', has_battle_pass, 'battle_pass_expires_at', battle_pass_expires_at)), '[]'::json) AS d
+      FROM users WHERE has_battle_pass = true
+    `);
+    const counts = await client.query(`
+      SELECT (SELECT COUNT(*) FROM game_progress)::int AS participants,
+             (SELECT COALESCE(SUM(bricks),0) FROM game_progress)::bigint AS total_bricks,
+             (SELECT COUNT(*) FROM users WHERE has_battle_pass = true)::int AS bp_count
+    `);
+    const cnt = counts.rows[0];
+    const backup = await client.query(`
+      INSERT INTO season_reset_backups
+        (triggered_by, total_participants, total_bricks, bp_count, game_progress, quest_completions, quest_progress, battle_pass)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id
+    `, [
+      req.admin?.walletAddress || 'admin',
+      cnt.participants, cnt.total_bricks, cnt.bp_count,
+      JSON.stringify(gpRows.rows[0].d),
+      JSON.stringify(qcRows.rows[0].d),
+      JSON.stringify(qpData),
+      JSON.stringify(bpRows.rows[0].d)
+    ]);
+    const backupId = backup.rows[0].id;
+
     // 1) SNAPSHOT antes de borrar: standings completos + quién tenía BP (auditoría/compensación)
     const standings = await client.query(`
       SELECT u.id, u.wallet_address, u.username, u.is_premium,
@@ -1401,9 +1452,10 @@ router.post('/season-reset', adminAuth, async (req, res) => {
 
     await client.query('COMMIT');
 
-    console.log(`[SEASON RESET] snapshot=${snap.rows[0].id} progress=${gp.rowCount} quests=${qc.rowCount}+${qpCleared} bpRevoked=${bp.rowCount} bpSnapshotted=${bpHolders.length}`);
+    console.log(`[SEASON RESET] backup=${backupId} snapshot=${snap.rows[0].id} progress=${gp.rowCount} quests=${qc.rowCount}+${qpCleared} bpRevoked=${bp.rowCount} bpSnapshotted=${bpHolders.length} by=${req.admin?.walletAddress || 'admin'}`);
     res.json({
       success: true,
+      backupId,
       snapshotId: snap.rows[0].id,
       progressReset: gp.rowCount,
       questCompletionsCleared: qc.rowCount,
@@ -1415,6 +1467,107 @@ router.post('/season-reset', adminAuth, async (req, res) => {
     await client.query('ROLLBACK');
     console.error('[SEASON RESET] FAILED — rolled back, nothing changed:', error);
     res.status(500).json({ error: 'Season reset failed (rolled back, nothing changed): ' + error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /admin/season-reset/backups - List pre-reset backups (metadata only)
+router.get('/season-reset/backups', adminAuth, async (req, res) => {
+  try {
+    const r = await db.query(`
+      SELECT id, created_at, triggered_by, total_participants, total_bricks, bp_count, restored_at, restored_by
+      FROM season_reset_backups
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+    res.json({ backups: r.rows });
+  } catch (error) {
+    console.error('Admin list backups error:', error);
+    res.status(500).json({ error: 'Failed to list backups' });
+  }
+});
+
+// POST /admin/season-reset/restore - Restore a full backup (undo a reset)
+// Requires { backupId, confirm: "RESTORE" }. Transactional.
+router.post('/season-reset/restore', adminAuth, async (req, res) => {
+  const { backupId, confirm } = req.body || {};
+  if (confirm !== 'RESTORE') {
+    return res.status(400).json({ error: 'Confirmation required: send { backupId, confirm: "RESTORE" }' });
+  }
+  if (!backupId) return res.status(400).json({ error: 'backupId required' });
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const b = await client.query('SELECT * FROM season_reset_backups WHERE id = $1', [parseInt(backupId)]);
+    if (b.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+    const backup = b.rows[0];
+
+    // 1) Restore game_progress (solo los campos que el reset toca; user_id como clave)
+    const gp = await client.query(`
+      UPDATE game_progress gp SET
+        bricks = s.bricks, level = s.level, xp = s.xp, xp_to_next_level = s.xp_to_next_level,
+        total_taps = s.total_taps, total_bricks_earned = s.total_bricks_earned, tap_power = s.tap_power,
+        energy = s.energy, boost_multiplier = s.boost_multiplier, boost_expires_at = s.boost_expires_at,
+        boost_type = s.boost_type, xp_bonus_percent = s.xp_bonus_percent, daily_streak = s.daily_streak,
+        updated_at = NOW()
+      FROM jsonb_populate_recordset(NULL::game_progress, $1::jsonb) s
+      WHERE gp.user_id = s.user_id
+    `, [JSON.stringify(backup.game_progress || [])]);
+
+    // 2) Restore quest_completions (id se regenera para no chocar con la secuencia)
+    await client.query('DELETE FROM quest_completions');
+    const qc = await client.query(`
+      INSERT INTO quest_completions (user_id, quest_id, completed_at, xp_earned, is_verified)
+      SELECT user_id, quest_id, completed_at, xp_earned, is_verified
+      FROM jsonb_populate_recordset(NULL::quest_completions, $1::jsonb)
+    `, [JSON.stringify(backup.quest_completions || [])]);
+
+    // 3) Restore quest_progress (si había en el backup)
+    let qpRestored = 0;
+    try {
+      await client.query('DELETE FROM quest_progress');
+      const qp = await client.query(`
+        INSERT INTO quest_progress
+          (user_id, quest_id, current_progress, is_completed, reward_claimed, reward_amount_received,
+           verification_data, verified_at, started_at, completed_at, claimed_at, reset_count, last_reset_at)
+        SELECT user_id, quest_id, current_progress, is_completed, reward_claimed, reward_amount_received,
+               verification_data, verified_at, started_at, completed_at, claimed_at, reset_count, last_reset_at
+        FROM jsonb_populate_recordset(NULL::quest_progress, $1::jsonb)
+      `, [JSON.stringify(backup.quest_progress || [])]);
+      qpRestored = qp.rowCount;
+    } catch (e) { console.warn('[SEASON RESTORE] quest_progress restore skipped:', e.message); }
+
+    // 4) Restore Battle Pass (limpiar todos, luego setear los del backup)
+    await client.query('UPDATE users SET has_battle_pass = false, battle_pass_expires_at = NULL WHERE has_battle_pass = true');
+    const bp = await client.query(`
+      UPDATE users u SET has_battle_pass = s.has_battle_pass, battle_pass_expires_at = s.battle_pass_expires_at, updated_at = NOW()
+      FROM jsonb_to_recordset($1::jsonb) AS s(user_id int, has_battle_pass boolean, battle_pass_expires_at timestamptz)
+      WHERE u.id = s.user_id
+    `, [JSON.stringify(backup.battle_pass || [])]);
+
+    await client.query('UPDATE season_reset_backups SET restored_at = NOW(), restored_by = $1 WHERE id = $2',
+      [req.admin?.walletAddress || 'admin', parseInt(backupId)]);
+
+    await client.query('COMMIT');
+    console.log(`[SEASON RESTORE] backup=${backupId} gp=${gp.rowCount} qc=${qc.rowCount} qp=${qpRestored} bp=${bp.rowCount} by=${req.admin?.walletAddress || 'admin'}`);
+    res.json({
+      success: true,
+      backupId: parseInt(backupId),
+      progressRestored: gp.rowCount,
+      questCompletionsRestored: qc.rowCount,
+      questProgressRestored: qpRestored,
+      battlePassesRestored: bp.rowCount
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[SEASON RESTORE] FAILED — rolled back, nothing changed:', error);
+    res.status(500).json({ error: 'Restore failed (rolled back, nothing changed): ' + error.message });
   } finally {
     client.release();
   }

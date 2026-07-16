@@ -30,8 +30,36 @@ export default function LeaderboardManager({ apiCall }) {
   const [resetConfirm, setResetConfirm] = useState('')
   const [resetting, setResetting] = useState(false)
   const [resetResult, setResetResult] = useState(null)
+  const [backups, setBackups] = useState([])
+  const [restoringId, setRestoringId] = useState(null)
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData(); loadBackups() }, [])
+
+  const loadBackups = async () => {
+    try {
+      const d = await apiCall('/api/admin/season-reset/backups')
+      setBackups(d.backups || [])
+    } catch { /* ignore */ }
+  }
+
+  const runRestore = async (backupId) => {
+    if (!confirm(`Restore backup #${backupId}?\n\nThis OVERWRITES current progress, quests and Battle Passes with the backed-up state.`)) return
+    const txt = prompt('Type RESTORE to confirm:')
+    if (txt !== 'RESTORE') { if (txt !== null) alert('Type exactly: RESTORE'); return }
+    setRestoringId(backupId)
+    try {
+      const data = await apiCall('/api/admin/season-reset/restore', {
+        method: 'POST',
+        body: JSON.stringify({ backupId, confirm: 'RESTORE' })
+      })
+      alert(`Restored backup #${data.backupId}: ${data.progressRestored} players, ${data.questCompletionsRestored} quests, ${data.battlePassesRestored} Battle Passes.`)
+      loadData(); loadBackups()
+    } catch (err) {
+      alert('Restore failed: ' + err.message)
+    } finally {
+      setRestoringId(null)
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -266,6 +294,7 @@ export default function LeaderboardManager({ apiCall }) {
       setResetConfirm('')
       setShowReset(false)
       loadData()
+      loadBackups()
     } catch (err) {
       alert('Reset failed: ' + err.message)
     } finally {
@@ -615,6 +644,40 @@ export default function LeaderboardManager({ apiCall }) {
             </div>
           </div>
         )}
+
+        {/* Backups / restore points — every reset saves one automatically */}
+        <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 8, color: '#a0a0b8' }}>
+            {'🛟'} Restore points ({backups.length}) — each reset auto-saves a full backup
+          </div>
+          {backups.length === 0 ? (
+            <p className="text-muted" style={{ fontSize: 11, margin: 0 }}>No backups yet. One is created automatically every time you run a reset.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+              {backups.map(b => (
+                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, padding: '7px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span className="font-mono" style={{ color: '#ffd700' }}>#{b.id}</span>
+                  <span className="text-muted">{new Date(b.created_at).toLocaleString()}</span>
+                  <span><strong>{b.total_participants}</strong> players</span>
+                  <span><strong>{Number(b.total_bricks || 0).toLocaleString()}</strong> bricks</span>
+                  <span><strong>{b.bp_count}</strong> BP</span>
+                  {b.restored_at ? (
+                    <span className="badge badge-green" style={{ fontSize: 9, marginLeft: 'auto' }}>restored {new Date(b.restored_at).toLocaleDateString()}</span>
+                  ) : (
+                    <button
+                      className="btn btn-sm"
+                      style={{ marginLeft: 'auto', fontSize: 10, borderColor: '#00aaff', color: '#00aaff' }}
+                      disabled={restoringId === b.id}
+                      onClick={() => runRestore(b.id)}
+                    >
+                      {restoringId === b.id ? 'Restoring…' : 'Restore'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {showCreateSeason && (
